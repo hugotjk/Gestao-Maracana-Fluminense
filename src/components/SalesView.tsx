@@ -20,32 +20,34 @@ export const SalesView: React.FC<SalesViewProps> = ({
   onSaveSales,
   onDeleteSale,
 }) => {
-  const [selectedMatchId, setSelectedMatchId] = useState<string>(activeMatchId || matches[0]?.id || '');
-  const selectedMatch = matches.find((m) => m.id === selectedMatchId) || matches[0];
+  const selectedMatch = matches.find((m) => m.id === activeMatchId) || matches[0];
 
   // Local state for inputting values per operation for the selected match
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Pre-fill inputs if sales already exist for this match
+  // Pre-fill inputs whenever active match, sales or operations change
   React.useEffect(() => {
     if (!selectedMatch) return;
     const initialValues: Record<string, string> = {};
     operations.forEach((op) => {
       const existing = sales.find(
         (s) =>
-          s.mandante === selectedMatch.mandante &&
-          s.visitante === selectedMatch.visitante &&
-          s.data === selectedMatch.data &&
+          (s.matchId === selectedMatch.id ||
+            (s.mandante === selectedMatch.mandante &&
+              s.visitante === selectedMatch.visitante &&
+              s.data === selectedMatch.data)) &&
           s.operacao.trim().toLowerCase() === op.operacao.trim().toLowerCase()
       );
       if (existing) {
         initialValues[op.codigo] = String(existing.venda);
+      } else {
+        initialValues[op.codigo] = '';
       }
     });
     setInputs(initialValues);
-  }, [selectedMatchId, sales, operations, selectedMatch]);
+  }, [activeMatchId, sales, operations, selectedMatch]);
 
   const handleInputChange = (opCodigo: string, val: string) => {
     setInputs((prev) => ({ ...prev, [opCodigo]: val }));
@@ -56,30 +58,31 @@ export const SalesView: React.FC<SalesViewProps> = ({
     if (!selectedMatch) return;
 
     let currentSalesList = [...sales];
-    let addedCount = 0;
 
     operations.forEach((op) => {
       const rawVal = inputs[op.codigo];
       if (rawVal !== undefined && rawVal !== '') {
         const numericVal = parseFloat(rawVal.replace(',', '.')) || 0;
 
-        // Check if sale record exists for this match + op
+        // Check if sale record exists for this match + operation
         const existingIdx = currentSalesList.findIndex(
           (s) =>
-            s.mandante === selectedMatch.mandante &&
-            s.visitante === selectedMatch.visitante &&
-            s.data === selectedMatch.data &&
+            (s.matchId === selectedMatch.id ||
+              (s.mandante === selectedMatch.mandante &&
+                s.visitante === selectedMatch.visitante &&
+                s.data === selectedMatch.data)) &&
             s.operacao.trim().toLowerCase() === op.operacao.trim().toLowerCase()
         );
 
         if (existingIdx >= 0) {
-          // Update existing
+          // Replace/update existing
           currentSalesList[existingIdx] = {
             ...currentSalesList[existingIdx],
             venda: numericVal,
+            matchId: selectedMatch.id,
           };
-        } else if (numericVal >= 0) {
-          // Create new
+        } else {
+          // Create new single entry for this match + op
           const nextCode = generateNextSaleCode(currentSalesList);
           const newSale: Sale = {
             codigo: nextCode,
@@ -91,13 +94,12 @@ export const SalesView: React.FC<SalesViewProps> = ({
             matchId: selectedMatch.id,
           };
           currentSalesList.push(newSale);
-          addedCount++;
         }
       }
     });
 
     onSaveSales(currentSalesList);
-    setSuccessMessage('Valores de vendas registrados com sucesso!');
+    setSuccessMessage(`Valores de vendas salvos para ${selectedMatch.mandante} x ${selectedMatch.visitante}!`);
     setTimeout(() => setSuccessMessage(null), 4000);
   };
 
@@ -116,7 +118,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
   return (
     <div id="sales-view-root" className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
       {/* Top Title Banner */}
-      <div id="sales-title-card" className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div id="sales-title-card" className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div>
           <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
             <DollarSign className="w-6 h-6 text-[#006633]" />
@@ -125,28 +127,6 @@ export const SalesView: React.FC<SalesViewProps> = ({
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
             Informe o valor faturado em cada setor/operação para o jogo do dia
           </p>
-        </div>
-
-        {/* Match Select Box */}
-        <div id="sales-match-selector" className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center gap-3">
-          <Trophy className="w-5 h-5 text-amber-500 flex-shrink-0" />
-          <div>
-            <label htmlFor="sales-match-select" className="text-xs font-bold text-slate-500 block uppercase">
-              Selecione o Jogo Operado:
-            </label>
-            <select
-              id="sales-match-select"
-              value={selectedMatchId}
-              onChange={(e) => setSelectedMatchId(e.target.value)}
-              className="bg-white border border-slate-300 font-bold text-slate-800 text-xs sm:text-sm rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-[#006633] focus:outline-none cursor-pointer mt-0.5"
-            >
-              {matches.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.mandante} vs {m.visitante} ({m.data})
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
       </div>
 
@@ -159,26 +139,6 @@ export const SalesView: React.FC<SalesViewProps> = ({
 
       {/* Main Form for entering sales values */}
       <form id="sales-entry-form" onSubmit={handleSaveAll} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-        <div id="match-details-header" className="bg-[#7A0022]/5 p-4 rounded-xl border border-[#7A0022]/15 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <span className="text-xs font-bold text-[#8A0029] uppercase tracking-wider block">
-              Dados do Confronto
-            </span>
-            <div className="text-lg font-extrabold text-slate-900 mt-0.5">
-              {selectedMatch ? `${selectedMatch.mandante} x ${selectedMatch.visitante}` : 'Selecione um jogo'}
-            </div>
-          </div>
-          <div className="flex items-center gap-4 text-xs font-medium text-slate-600">
-            <span className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-2xs">
-              <Calendar className="w-4 h-4 text-slate-400" />
-              Data: <strong>{selectedMatch?.data || '-'}</strong>
-            </span>
-            <span className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-2xs">
-              Horário: <strong>{selectedMatch?.horario || '-'}</strong>
-            </span>
-          </div>
-        </div>
-
         <div id="operation-sales-inputs-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {operations.map((op) => (
             <div

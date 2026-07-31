@@ -22,8 +22,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   onAddAssignment,
   onRemoveAssignment,
 }) => {
-  const [selectedMatchId, setSelectedMatchId] = useState<string>(activeMatchId || matches[0]?.id || '');
-  const selectedMatch = matches.find((m) => m.id === selectedMatchId) || matches[0];
+  const selectedMatch = matches.find((m) => m.id === activeMatchId) || matches[0];
 
   const [selectedCpf, setSelectedCpf] = useState<string>('');
   const [selectedOpCodigo, setSelectedOpCodigo] = useState<string>('');
@@ -80,7 +79,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   };
 
   // Filter assignments for selected match
-  const matchAssignments = assignments.filter((a) => a.matchId === selectedMatchId);
+  const matchAssignments = assignments.filter((a) => a.matchId === selectedMatch?.id);
 
   // Filter by search
   const filteredAssignments = matchAssignments.filter((asg) => {
@@ -102,7 +101,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   return (
     <div id="assignments-view-root" className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
       {/* Header Banner */}
-      <div id="assignments-title-card" className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div id="assignments-title-card" className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
         <div>
           <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
             <Users className="w-6 h-6 text-[#8A0029]" />
@@ -113,33 +112,17 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
           </p>
         </div>
 
-        {/* Export Button & Match Selector */}
-        <div id="assignments-top-actions" className="flex flex-wrap items-center gap-3">
-          <div id="assignments-match-select-box" className="bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 flex items-center gap-2">
-            <Trophy className="w-4 h-4 text-amber-500" />
-            <select
-              value={selectedMatchId}
-              onChange={(e) => setSelectedMatchId(e.target.value)}
-              className="bg-white border border-slate-300 font-bold text-slate-800 text-xs rounded-lg px-2.5 py-1 focus:ring-2 focus:ring-[#8A0029] focus:outline-none"
-            >
-              {matches.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.mandante} x {m.visitante} ({m.data})
-                </option>
-              ))}
-            </select>
-          </div>
-
+        <div>
           <button
             onClick={handleExportXLSX}
             disabled={matchAssignments.length === 0}
-            className={`flex items-center gap-2 font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 font-bold text-xs px-3.5 py-2 rounded-xl transition-all cursor-pointer shadow-sm ${
               matchAssignments.length > 0
-                ? 'bg-[#006633] hover:bg-emerald-800 text-white shadow-emerald-900/10'
+                ? 'bg-[#006633] hover:bg-emerald-800 text-white'
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed'
             }`}
           >
-            <FileSpreadsheet className="w-4 h-4" />
+            <FileSpreadsheet className="w-3.5 h-3.5" />
             <span>Gerar Planilha (XLSX)</span>
           </button>
         </div>
