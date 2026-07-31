@@ -1,4 +1,4 @@
-import { Sale, Employee, Operation, Match } from '../types';
+import { Sale, Employee, Operation, Match, Assignment } from '../types';
 import { getScriptUrl } from './storage';
 
 export interface SyncStatus {
@@ -66,6 +66,7 @@ export async function pushAllToGoogleSheets(
     employees: Employee[];
     operations: Operation[];
     matches: Match[];
+    assignments?: Assignment[];
   }
 ): Promise<{ success: boolean; message: string }> {
   try {
@@ -79,6 +80,7 @@ export async function pushAllToGoogleSheets(
     // 1. Try Apps Script Web App if URL configured (ZERO login required!)
     if (scriptUrl && scriptUrl.startsWith('http')) {
       const payload = {
+        sheetId: cleanSheetId,
         salesHeader: ['codigo', 'data', 'mandante', 'visitante', 'operacao', 'venda'],
         sales: data.sales.map((s) => [s.codigo, s.data, s.mandante, s.visitante, s.operacao, s.venda]),
         employeesHeader: ['cpf', 'nome', 'email', 'celular', 'setor', 'empresa', 'funcao'],
@@ -87,12 +89,14 @@ export async function pushAllToGoogleSheets(
         operations: data.operations.map((o) => [o.codigo, o.operacao, o.meta]),
         matchesHeader: ['codigo', 'data', 'horario', 'mandante', 'visitante'],
         matches: data.matches.map((m) => [m.id, m.data, m.horario, m.mandante, m.visitante]),
+        assignmentsHeader: ['id', 'jogoId', 'cpf', 'operacaoCodigo', 'funcao'],
+        assignments: (data.assignments || []).map((a) => [a.id, a.matchId, a.cpf, a.operacaoCodigo, a.funcao || '']),
       };
 
       await fetch(scriptUrl, {
         method: 'POST',
         mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload),
       });
 
@@ -166,6 +170,14 @@ export async function pushAllToGoogleSheets(
         ['codigo', 'data', 'horario', 'mandante', 'visitante'],
         ...data.matches.map((m) => [m.id, m.data, m.horario, m.mandante, m.visitante]),
       ]);
+
+      // Aba Escala (if assignments exist)
+      if (data.assignments && data.assignments.length > 0) {
+        await updateTab('Escala!A1:E', [
+          ['id', 'jogoId', 'cpf', 'operacaoCodigo', 'funcao'],
+          ...data.assignments.map((a) => [a.id, a.matchId, a.cpf, a.operacaoCodigo, a.funcao || '']),
+        ]);
+      }
 
       return {
         success: true,

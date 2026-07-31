@@ -12,6 +12,7 @@ const STORAGE_KEYS = {
 };
 
 export const DEFAULT_SHEET_ID = '1LSacDLpH7y4M8s2H8627FnAxS0IvFe54ACK9rE4BErs';
+export const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxn95noFHcFSvIB9XANE9_jetXyCmo0OhUWj80vB-BHPI59w9hR9TkN9BY476hy7Ew/exec';
 
 const initialMatches: Match[] = [];
 
@@ -129,7 +130,7 @@ export function setSpreadsheetId(id: string) {
 }
 
 export function getScriptUrl(): string {
-  return localStorage.getItem(STORAGE_KEYS.SCRIPT_URL) || '';
+  return localStorage.getItem(STORAGE_KEYS.SCRIPT_URL) || DEFAULT_SCRIPT_URL;
 }
 
 export function setScriptUrl(url: string) {

@@ -22,6 +22,7 @@ import {
   getScriptUrl,
   setScriptUrl,
   clearAllLocalData,
+  getStoredAssignments,
 } from '../lib/storage';
 import { pushAllToGoogleSheets, pullFromGoogleSheets } from '../lib/googleSheets';
 import { exportFullDatabaseXLSX } from '../lib/excel';
@@ -59,13 +60,25 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
 
   const appsScriptCode = `function doPost(e) {
   try {
-    var data = JSON.parse(e.postData.contents);
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var contents = e.postData ? e.postData.contents : "";
+    var data = contents ? JSON.parse(contents) : {};
+    
+    var ss = null;
+    if (data.sheetId) {
+      try { ss = SpreadsheetApp.openById(data.sheetId); } catch(err) {}
+    }
+    if (!ss) {
+      try { ss = SpreadsheetApp.getActiveSpreadsheet(); } catch(err) {}
+    }
+    if (!ss) {
+      return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Planilha não encontrada." })).setMimeType(ContentService.MimeType.JSON);
+    }
 
     if (data.sales) updateSheet(ss, "Venda", data.salesHeader, data.sales);
     if (data.employees) updateSheet(ss, "Funcionarios", data.employeesHeader, data.employees);
     if (data.operations) updateSheet(ss, "Operacoes", data.operationsHeader, data.operations);
     if (data.matches) updateSheet(ss, "Jogos", data.matchesHeader, data.matches);
+    if (data.assignments) updateSheet(ss, "Escala", data.assignmentsHeader, data.assignments);
 
     return ContentService.createTextOutput(JSON.stringify({ status: "success" })).setMimeType(ContentService.MimeType.JSON);
   } catch(err) {
@@ -88,13 +101,43 @@ function updateSheet(ss, sheetName, headers, rows) {
     setTimeout(() => setCopiedCode(false), 3000);
   };
 
-  const handleSaveScriptUrl = () => {
-    setScriptUrl(scriptUrlInput.trim());
-    setStatusMessage({
-      type: 'success',
-      text: 'Link do Web App salvo! O app enviará novos cadastros automaticamente para a planilha SEM pedir login.',
-    });
-    setTimeout(() => setStatusMessage(null), 4000);
+  const handleSaveScriptUrl = async () => {
+    const cleanUrl = scriptUrlInput.trim();
+    setScriptUrl(cleanUrl);
+
+    if (cleanUrl) {
+      setStatusMessage({
+        type: 'info',
+        text: 'URL do Web App salva! Alimentando sua planilha agora...',
+      });
+
+      const currentToken = token || (await getAccessToken());
+      setIsSyncing(true);
+
+      const res = await pushAllToGoogleSheets(sheetIdInput, currentToken || '', {
+        sales,
+        employees,
+        operations,
+        matches,
+        assignments: getStoredAssignments(),
+      });
+
+      setIsSyncing(false);
+
+      if (res.success) {
+        setStatusMessage({
+          type: 'success',
+          text: 'Auto-Sync ativado com sucesso! Todos os seus cadastros atuais foram enviados para a planilha.',
+        });
+      } else {
+        setStatusMessage({ type: 'error', text: res.message });
+      }
+    } else {
+      setStatusMessage({
+        type: 'info',
+        text: 'URL do Web App removida.',
+      });
+    }
   };
 
   const handleClearLocalData = () => {
@@ -186,6 +229,7 @@ function updateSheet(ss, sheetName, headers, rows) {
       employees,
       operations,
       matches,
+      assignments: getStoredAssignments(),
     });
 
     setIsSyncing(false);

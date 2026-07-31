@@ -14,6 +14,7 @@ import {
   getActiveMatchId,
   setActiveMatchId,
   getSpreadsheetId,
+  getScriptUrl,
 } from './lib/storage';
 import { initAuth, getAccessToken } from './lib/auth';
 import { pushAllToGoogleSheets } from './lib/googleSheets';
@@ -56,6 +57,9 @@ export default function App() {
     setSalesState(loadedSales);
     setActiveMatchIdState(loadedActiveId);
 
+    // Initial sync with Web App on load
+    triggerAutoSync(loadedSales, loadedEmployees, loadedOperations, loadedMatches, loadedAssignments);
+
     const unsubscribe = initAuth(
       (_user, token) => {
         setAuthToken(token);
@@ -74,18 +78,22 @@ export default function App() {
       latestSales: Sale[],
       latestEmployees: Employee[],
       latestOperations: Operation[],
-      latestMatches: Match[]
+      latestMatches: Match[],
+      latestAssignments?: Assignment[]
     ) => {
       try {
         const token = authToken || (await getAccessToken());
         const sheetId = getSpreadsheetId();
-        if (token && sheetId) {
+        const scriptUrl = getScriptUrl();
+
+        if ((token || scriptUrl) && sheetId) {
           setIsSyncing(true);
-          await pushAllToGoogleSheets(sheetId, token, {
+          await pushAllToGoogleSheets(sheetId, token || '', {
             sales: latestSales,
             employees: latestEmployees,
             operations: latestOperations,
             matches: latestMatches,
+            assignments: latestAssignments || assignments,
           });
         }
       } catch (err) {
@@ -94,7 +102,7 @@ export default function App() {
         setIsSyncing(false);
       }
     },
-    [authToken]
+    [authToken, assignments]
   );
 
   // Set active match
@@ -108,21 +116,21 @@ export default function App() {
     const next = [...matches, m];
     setMatchesState(next);
     saveMatches(next);
-    triggerAutoSync(sales, employees, operations, next);
+    triggerAutoSync(sales, employees, operations, next, assignments);
   };
 
   const handleUpdateMatch = (m: Match) => {
     const next = matches.map((item) => (item.id === m.id ? m : item));
     setMatchesState(next);
     saveMatches(next);
-    triggerAutoSync(sales, employees, operations, next);
+    triggerAutoSync(sales, employees, operations, next, assignments);
   };
 
   const handleDeleteMatch = (id: string) => {
     const next = matches.filter((item) => item.id !== id);
     setMatchesState(next);
     saveMatches(next);
-    triggerAutoSync(sales, employees, operations, next);
+    triggerAutoSync(sales, employees, operations, next, assignments);
   };
 
   // Operations operations
@@ -130,21 +138,21 @@ export default function App() {
     const next = [...operations, op];
     setOperationsState(next);
     saveOperations(next);
-    triggerAutoSync(sales, employees, next, matches);
+    triggerAutoSync(sales, employees, next, matches, assignments);
   };
 
   const handleUpdateOperation = (op: Operation) => {
     const next = operations.map((item) => (item.codigo === op.codigo ? op : item));
     setOperationsState(next);
     saveOperations(next);
-    triggerAutoSync(sales, employees, next, matches);
+    triggerAutoSync(sales, employees, next, matches, assignments);
   };
 
   const handleDeleteOperation = (codigo: string) => {
     const next = operations.filter((item) => item.codigo !== codigo);
     setOperationsState(next);
     saveOperations(next);
-    triggerAutoSync(sales, employees, next, matches);
+    triggerAutoSync(sales, employees, next, matches, assignments);
   };
 
   // Employee operations
@@ -152,21 +160,21 @@ export default function App() {
     const next = [...employees, emp];
     setEmployeesState(next);
     saveEmployees(next);
-    triggerAutoSync(sales, next, operations, matches);
+    triggerAutoSync(sales, next, operations, matches, assignments);
   };
 
   const handleUpdateEmployee = (emp: Employee) => {
     const next = employees.map((item) => (item.cpf === emp.cpf ? emp : item));
     setEmployeesState(next);
     saveEmployees(next);
-    triggerAutoSync(sales, next, operations, matches);
+    triggerAutoSync(sales, next, operations, matches, assignments);
   };
 
   const handleDeleteEmployee = (cpf: string) => {
     const next = employees.filter((item) => item.cpf !== cpf);
     setEmployeesState(next);
     saveEmployees(next);
-    triggerAutoSync(sales, next, operations, matches);
+    triggerAutoSync(sales, next, operations, matches, assignments);
   };
 
   // Assignments operations
@@ -174,18 +182,21 @@ export default function App() {
     const next = [...assignments, asg];
     setAssignmentsState(next);
     saveAssignments(next);
+    triggerAutoSync(sales, employees, operations, matches, next);
   };
 
   const handleUpdateAssignment = (asg: Assignment) => {
     const next = assignments.map((item) => (item.id === asg.id ? asg : item));
     setAssignmentsState(next);
     saveAssignments(next);
+    triggerAutoSync(sales, employees, operations, matches, next);
   };
 
   const handleRemoveAssignment = (id: string) => {
     const next = assignments.filter((item) => item.id !== id);
     setAssignmentsState(next);
     saveAssignments(next);
+    triggerAutoSync(sales, employees, operations, matches, next);
   };
 
   // Sales operations
