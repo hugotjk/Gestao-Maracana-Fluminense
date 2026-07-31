@@ -153,7 +153,7 @@ function updateSheet(ss, sheetName, headers, rows) {
   const handleClearLocalData = () => {
     if (window.confirm('Tem certeza que deseja apagar todos os dados salvos localmente no aplicativo?')) {
       clearAllLocalData();
-      onImportData({ sales: [], employees: [], operations: [], matches: [] });
+      onImportData({ sales: [], employees: [], operations: [], matches: [], assignments: [] });
       setStatusMessage({ type: 'success', text: 'Todos os dados locais foram limpos. O app está sem nenhum dado fake.' });
       setTimeout(() => setStatusMessage(null), 4000);
     }

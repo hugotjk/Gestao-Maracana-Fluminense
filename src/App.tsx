@@ -19,7 +19,7 @@ import {
   sortEmployees,
 } from './lib/storage';
 import { initAuth, getAccessToken } from './lib/auth';
-import { pushAllToGoogleSheets } from './lib/googleSheets';
+import { pushAllToGoogleSheets, pullFromGoogleSheets } from './lib/googleSheets';
 
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
@@ -58,6 +58,35 @@ export default function App() {
     setAssignmentsState(loadedAssignments);
     setSalesState(loadedSales);
     setActiveMatchIdState(loadedActiveId);
+
+    // Try pulling latest data from Google Sheets on load (e.g. for new devices or cross-device sync)
+    const sheetId = getSpreadsheetId();
+    if (sheetId) {
+      pullFromGoogleSheets(sheetId).then((res) => {
+        if (res.success && res.data) {
+          if (res.data.assignments && res.data.assignments.length > 0) {
+            setAssignmentsState(res.data.assignments);
+            saveAssignments(res.data.assignments);
+          }
+          if (res.data.employees && res.data.employees.length > 0) {
+            setEmployeesState(res.data.employees);
+            saveEmployees(res.data.employees);
+          }
+          if (res.data.matches && res.data.matches.length > 0) {
+            setMatchesState(res.data.matches);
+            saveMatches(res.data.matches);
+          }
+          if (res.data.operations && res.data.operations.length > 0) {
+            setOperationsState(res.data.operations);
+            saveOperations(res.data.operations);
+          }
+          if (res.data.sales && res.data.sales.length > 0) {
+            setSalesState(res.data.sales);
+            saveSales(res.data.sales);
+          }
+        }
+      }).catch((err) => console.warn('Auto pull on load error:', err));
+    }
 
     // Initial sync with Web App on load
     triggerAutoSync(loadedSales, loadedEmployees, loadedOperations, loadedMatches, loadedAssignments);
@@ -221,11 +250,13 @@ export default function App() {
     employees: Employee[];
     operations: Operation[];
     matches: Match[];
+    assignments?: Assignment[];
   }) => {
     let newSales = sales;
     let newEmployees = employees;
     let newOperations = operations;
     let newMatches = matches;
+    let newAssignments = assignments;
 
     if (data.sales && data.sales.length > 0) {
       newSales = data.sales;
@@ -247,8 +278,13 @@ export default function App() {
       setMatchesState(newMatches);
       saveMatches(newMatches);
     }
+    if (data.assignments && data.assignments.length > 0) {
+      newAssignments = data.assignments;
+      setAssignmentsState(newAssignments);
+      saveAssignments(newAssignments);
+    }
 
-    triggerAutoSync(newSales, newEmployees, newOperations, newMatches);
+    triggerAutoSync(newSales, newEmployees, newOperations, newMatches, newAssignments);
   };
 
   return (

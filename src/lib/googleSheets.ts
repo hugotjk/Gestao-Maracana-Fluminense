@@ -233,6 +233,7 @@ export async function pullFromGoogleSheets(
     employees: Employee[];
     operations: Operation[];
     matches: Match[];
+    assignments?: Assignment[];
   };
 }> {
   try {
@@ -276,6 +277,7 @@ export async function pullFromGoogleSheets(
     const funcRows = await fetchSheetRows('Funcionarios');
     const opsRows = await fetchSheetRows('Operacoes');
     const jogosRows = await fetchSheetRows('Jogos');
+    const escalaRows = await fetchSheetRows('Escala');
 
     // Parse Vendas
     const sales: Sale[] = [];
@@ -346,10 +348,27 @@ export async function pullFromGoogleSheets(
       }
     }
 
+    // Parse Escala (Assignments)
+    const assignments: Assignment[] = [];
+    if (escalaRows.length > 1) {
+      for (let i = 1; i < escalaRows.length; i++) {
+        const row = escalaRows[i];
+        if (row && (row[0] || row[1] || row[2])) {
+          assignments.push({
+            id: row[0] || `ASG_${Date.now()}_${i}`,
+            matchId: row[1] || '',
+            cpf: row[2] || '',
+            operacaoCodigo: row[3] || '',
+            funcao: row[4] || '',
+          });
+        }
+      }
+    }
+
     return {
       success: true,
       message: 'Dados importados diretamente da planilha pública com sucesso!',
-      data: { sales, employees, operations, matches },
+      data: { sales, employees, operations, matches, assignments },
     };
   } catch (error: any) {
     return {
