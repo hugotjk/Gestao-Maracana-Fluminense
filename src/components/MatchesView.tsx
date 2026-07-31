@@ -81,14 +81,16 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
     setTimeout(() => setFeedback(null), 3500);
   };
 
-  const filteredMatches = matches.filter((m) => {
-    const q = searchTerm.toLowerCase();
-    return (
-      m.mandante.toLowerCase().includes(q) ||
-      m.visitante.toLowerCase().includes(q) ||
-      m.data.includes(q)
-    );
-  });
+  const filteredMatches = matches
+    .filter((m) => {
+      const q = searchTerm.toLowerCase();
+      return (
+        m.mandante.toLowerCase().includes(q) ||
+        m.visitante.toLowerCase().includes(q) ||
+        m.data.includes(q)
+      );
+    })
+    .sort((a, b) => (b.data || '').localeCompare(a.data || ''));
 
   return (
     <div id="matches-view-root" className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">

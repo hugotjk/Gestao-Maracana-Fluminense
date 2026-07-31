@@ -20,6 +20,7 @@ export interface Employee {
   setor: string; // default "1,2,3,4,5,6"
   empresa: string; // default "FMS"
   funcaoDefault?: string;
+  favorito?: boolean;
 }
 
 export interface Assignment {

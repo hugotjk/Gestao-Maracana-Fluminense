@@ -138,29 +138,19 @@ export const SalesView: React.FC<SalesViewProps> = ({
       )}
 
       {/* Main Form for entering sales values */}
-      <form id="sales-entry-form" onSubmit={handleSaveAll} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-        <div id="operation-sales-inputs-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <form id="sales-entry-form" onSubmit={handleSaveAll} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-5">
+        <div id="operation-sales-inputs-grid" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {operations.map((op) => (
             <div
               key={op.codigo}
-              className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-emerald-300 transition-all shadow-2xs flex flex-col justify-between"
+              className="p-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-white hover:border-emerald-500 focus-within:border-emerald-500 transition-all shadow-2xs flex flex-col justify-between gap-1.5"
             >
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono font-bold text-slate-400 bg-slate-200/80 px-2 py-0.5 rounded">
-                    {op.codigo}
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    Meta: R$ {op.meta.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <label className="block text-sm font-bold text-slate-800 mt-2">
-                  {op.operacao}
-                </label>
-              </div>
+              <label className="block text-xs font-extrabold text-slate-800 truncate" title={op.operacao}>
+                {op.operacao}
+              </label>
 
-              <div className="mt-3 relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500 font-semibold text-sm">
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400 font-bold text-xs">
                   R$
                 </span>
                 <input
@@ -170,7 +160,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
                   placeholder="0,00"
                   value={inputs[op.codigo] || ''}
                   onChange={(e) => handleInputChange(op.codigo, e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-sm font-bold text-slate-900 focus:ring-2 focus:ring-[#006633] focus:border-transparent focus:outline-none"
+                  className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-extrabold text-slate-900 focus:ring-2 focus:ring-[#006633] focus:border-transparent focus:outline-none"
                 />
               </div>
             </div>

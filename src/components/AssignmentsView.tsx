@@ -32,15 +32,24 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [message, setMessage] = useState<string | null>(null);
 
+  const sortedEmployeesForSelect = React.useMemo(() => {
+    return [...employees].sort((a, b) => {
+      const favA = a.favorito ? 1 : 0;
+      const favB = b.favorito ? 1 : 0;
+      if (favA !== favB) return favB - favA;
+      return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' });
+    });
+  }, [employees]);
+
   // Set default operation on load
   React.useEffect(() => {
     if (operations.length > 0 && !selectedOpCodigo) {
       setSelectedOpCodigo(operations[0].codigo);
     }
-    if (employees.length > 0 && !selectedCpf) {
-      setSelectedCpf(employees[0].cpf);
+    if (sortedEmployeesForSelect.length > 0 && !selectedCpf) {
+      setSelectedCpf(sortedEmployeesForSelect[0].cpf);
     }
-  }, [operations, employees]);
+  }, [operations, sortedEmployeesForSelect]);
 
   const handleEmployeeSelect = (cpf: string) => {
     setSelectedCpf(cpf);
@@ -150,9 +159,9 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
               className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-[#8A0029] focus:outline-none"
             >
               {employees.length === 0 && <option value="">Nenhum funcionário cadastrado</option>}
-              {employees.map((e) => (
+              {sortedEmployeesForSelect.map((e) => (
                 <option key={e.cpf} value={e.cpf}>
-                  {e.nome} - CPF: {e.cpf} ({e.empresa})
+                  {e.favorito ? '★ ' : ''}{e.nome} - CPF: {e.cpf} ({e.empresa})
                 </option>
               ))}
             </select>

@@ -68,11 +68,13 @@ export const Header: React.FC<HeaderProps> = ({
             onChange={(e) => onSelectActiveMatch(e.target.value)}
             className="bg-[#3D0010] text-white text-xs sm:text-sm font-medium rounded-lg px-2.5 py-1.5 border border-rose-800/80 focus:ring-2 focus:ring-amber-400 focus:outline-none cursor-pointer"
           >
-            {matches.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.mandante} vs {m.visitante} ({m.data ? new Date(m.data + 'T00:00:00').toLocaleDateString('pt-BR') : ''})
-              </option>
-            ))}
+            {[...matches]
+              .sort((a, b) => (b.data || '').localeCompare(a.data || ''))
+              .map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.mandante} vs {m.visitante} ({m.data ? new Date(m.data + 'T00:00:00').toLocaleDateString('pt-BR') : ''})
+                </option>
+              ))}
           </select>
         </div>
       </div>
@@ -116,7 +118,7 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             <Users className="w-4 h-4 text-amber-300" />
-            <span>Escala & XLSX</span>
+            <span>Escala</span>
           </button>
 
           <button

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { UserPlus, Search, Edit2, Trash2, CheckCircle2, Building, Mail, Phone, Hash, Shield } from 'lucide-react';
+import { UserPlus, Search, Edit2, Trash2, CheckCircle2, Building, Mail, Phone, Hash, Shield, Star } from 'lucide-react';
 import { Employee } from '../types';
 
 interface EmployeesViewProps {
@@ -90,15 +90,22 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
     setTimeout(() => setFeedback(null), 3500);
   };
 
-  const filteredEmployees = employees.filter((emp) => {
-    const q = searchTerm.toLowerCase();
-    return (
-      emp.nome.toLowerCase().includes(q) ||
-      emp.cpf.includes(q) ||
-      emp.email.toLowerCase().includes(q) ||
-      emp.empresa.toLowerCase().includes(q)
-    );
-  });
+  const filteredEmployees = employees
+    .filter((emp) => {
+      const q = searchTerm.toLowerCase();
+      return (
+        emp.nome.toLowerCase().includes(q) ||
+        emp.cpf.includes(q) ||
+        emp.email.toLowerCase().includes(q) ||
+        emp.empresa.toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => {
+      const favA = a.favorito ? 1 : 0;
+      const favB = b.favorito ? 1 : 0;
+      if (favA !== favB) return favB - favA;
+      return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' });
+    });
 
   return (
     <div id="employees-view-root" className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
@@ -267,6 +274,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-100/80 text-xs font-semibold text-slate-600 uppercase tracking-wider border-b border-slate-200">
+                <th className="py-3 px-3 text-center">Fav</th>
                 <th className="py-3 px-4">CPF</th>
                 <th className="py-3 px-4">Nome</th>
                 <th className="py-3 px-4">Email</th>
@@ -279,13 +287,28 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
             <tbody className="divide-y divide-slate-100 text-xs">
               {filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400 text-xs">
+                  <td colSpan={8} className="py-8 text-center text-slate-400 text-xs">
                     Nenhum funcionário encontrado.
                   </td>
                 </tr>
               ) : (
                 filteredEmployees.map((emp) => (
                   <tr key={emp.cpf} className="hover:bg-slate-50 transition-colors">
+                    <td className="py-3 px-3 text-center">
+                      <button
+                        onClick={() => onUpdateEmployee({ ...emp, favorito: !emp.favorito })}
+                        className="p-1 rounded-md hover:bg-amber-100/60 transition-colors cursor-pointer"
+                        title={emp.favorito ? 'Remover dos favoritos' : 'Marcar como favorito'}
+                      >
+                        <Star
+                          className={`w-4 h-4 ${
+                            emp.favorito
+                              ? 'fill-amber-400 text-amber-500'
+                              : 'text-slate-300 hover:text-amber-400'
+                          }`}
+                        />
+                      </button>
+                    </td>
                     <td className="py-3 px-4 font-mono font-bold text-slate-700">
                       {emp.cpf}
                     </td>

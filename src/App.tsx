@@ -15,6 +15,8 @@ import {
   setActiveMatchId,
   getSpreadsheetId,
   getScriptUrl,
+  sortMatchesByDate,
+  sortEmployees,
 } from './lib/storage';
 import { initAuth, getAccessToken } from './lib/auth';
 import { pushAllToGoogleSheets } from './lib/googleSheets';
@@ -113,21 +115,21 @@ export default function App() {
 
   // Match operations
   const handleAddMatch = (m: Match) => {
-    const next = [...matches, m];
+    const next = sortMatchesByDate([...matches, m]);
     setMatchesState(next);
     saveMatches(next);
     triggerAutoSync(sales, employees, operations, next, assignments);
   };
 
   const handleUpdateMatch = (m: Match) => {
-    const next = matches.map((item) => (item.id === m.id ? m : item));
+    const next = sortMatchesByDate(matches.map((item) => (item.id === m.id ? m : item)));
     setMatchesState(next);
     saveMatches(next);
     triggerAutoSync(sales, employees, operations, next, assignments);
   };
 
   const handleDeleteMatch = (id: string) => {
-    const next = matches.filter((item) => item.id !== id);
+    const next = sortMatchesByDate(matches.filter((item) => item.id !== id));
     setMatchesState(next);
     saveMatches(next);
     triggerAutoSync(sales, employees, operations, next, assignments);
@@ -157,21 +159,21 @@ export default function App() {
 
   // Employee operations
   const handleAddEmployee = (emp: Employee) => {
-    const next = [...employees, emp];
+    const next = sortEmployees([...employees, emp]);
     setEmployeesState(next);
     saveEmployees(next);
     triggerAutoSync(sales, next, operations, matches, assignments);
   };
 
   const handleUpdateEmployee = (emp: Employee) => {
-    const next = employees.map((item) => (item.cpf === emp.cpf ? emp : item));
+    const next = sortEmployees(employees.map((item) => (item.cpf === emp.cpf ? emp : item)));
     setEmployeesState(next);
     saveEmployees(next);
     triggerAutoSync(sales, next, operations, matches, assignments);
   };
 
   const handleDeleteEmployee = (cpf: string) => {
-    const next = employees.filter((item) => item.cpf !== cpf);
+    const next = sortEmployees(employees.filter((item) => item.cpf !== cpf));
     setEmployeesState(next);
     saveEmployees(next);
     triggerAutoSync(sales, next, operations, matches, assignments);

@@ -14,7 +14,15 @@ const STORAGE_KEYS = {
 export const DEFAULT_SHEET_ID = '1LSacDLpH7y4M8s2H8627FnAxS0IvFe54ACK9rE4BErs';
 export const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxn95noFHcFSvIB9XANE9_jetXyCmo0OhUWj80vB-BHPI59w9hR9TkN9BY476hy7Ew/exec';
 
-const initialMatches: Match[] = [];
+// Helper to sort matches by date (oldest at the bottom -> ascending order from top to bottom means top is newest, bottom is oldest? Wait: "mais antigo fica em baixo" means top is newest, bottom is oldest, OR ascending order where oldest is at bottom. Ascending order means newest on top or oldest on top? Let's check: Top: Newest, Bottom: Oldest -> date descending OR Top: Newer, Bottom: Older -> date descending. Or if date ascending: Top is older, Bottom is newer. "o mais antigo fica em baixo" -> oldest at bottom means descending date sort (newest date first at the top, oldest date at the bottom)).
+export function sortMatchesByDate(matches: Match[]): Match[] {
+  return [...matches].sort((a, b) => {
+    // b.data vs a.data: descending means newest at top, oldest at bottom
+    if (!a.data) return 1;
+    if (!b.data) return -1;
+    return b.data.localeCompare(a.data);
+  });
+}
 
 const initialOperations: Operation[] = [];
 
@@ -30,14 +38,15 @@ export function getStoredMatches(): Match[] {
     return [];
   }
   try {
-    return JSON.parse(data);
+    return sortMatchesByDate(JSON.parse(data));
   } catch {
     return [];
   }
 }
 
 export function saveMatches(matches: Match[]) {
-  localStorage.setItem(STORAGE_KEYS.MATCHES, JSON.stringify(matches));
+  const sorted = sortMatchesByDate(matches);
+  localStorage.setItem(STORAGE_KEYS.MATCHES, JSON.stringify(sorted));
 }
 
 export function getStoredOperations(): Operation[] {
@@ -56,20 +65,31 @@ export function saveOperations(operations: Operation[]) {
   localStorage.setItem(STORAGE_KEYS.OPERATIONS, JSON.stringify(operations));
 }
 
+export function sortEmployees(employees: Employee[]): Employee[] {
+  return [...employees].sort((a, b) => {
+    // Favorites first
+    if (a.favorito && !b.favorito) return -1;
+    if (!a.favorito && b.favorito) return 1;
+    // Alphabetical by name
+    return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' });
+  });
+}
+
 export function getStoredEmployees(): Employee[] {
   const data = localStorage.getItem(STORAGE_KEYS.EMPLOYEES);
   if (!data) {
     return [];
   }
   try {
-    return JSON.parse(data);
+    return sortEmployees(JSON.parse(data));
   } catch {
     return [];
   }
 }
 
 export function saveEmployees(employees: Employee[]) {
-  localStorage.setItem(STORAGE_KEYS.EMPLOYEES, JSON.stringify(employees));
+  const sorted = sortEmployees(employees);
+  localStorage.setItem(STORAGE_KEYS.EMPLOYEES, JSON.stringify(sorted));
 }
 
 export function getStoredAssignments(): Assignment[] {
