@@ -54,6 +54,17 @@ function parseCSV(csvText: string): string[][] {
   return lines;
 }
 
+export function extractSpreadsheetId(input: string): string {
+  let clean = input.trim();
+  if (clean.includes('docs.google.com/spreadsheets/d/')) {
+    const match = clean.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    if (match && match[1]) {
+      return match[1];
+    }
+  }
+  return clean;
+}
+
 /**
  * Pushes local data to Google Sheets via Apps Script Web App (0 login required)
  * OR via official Google Sheets REST API (if OAuth token is available).
@@ -70,40 +81,41 @@ export async function pushAllToGoogleSheets(
   }
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const cleanSheetId = spreadsheetId.trim();
+    const cleanSheetId = extractSpreadsheetId(spreadsheetId);
     if (!cleanSheetId) {
       throw new Error('ID da Planilha não foi informado.');
     }
 
     const scriptUrl = getScriptUrl();
+    const payload = {
+      sheetId: cleanSheetId,
+      salesHeader: ['codigo', 'data', 'mandante', 'visitante', 'operacao', 'venda'],
+      sales: data.sales.map((s) => [s.codigo, s.data, s.mandante, s.visitante, s.operacao, s.venda]),
+      employeesHeader: ['cpf', 'nome', 'email', 'celular', 'setor', 'empresa', 'funcao'],
+      employees: data.employees.map((e) => [e.cpf, e.nome, e.email, e.celular, e.setor, e.empresa, e.funcaoDefault || 'Atendente']),
+      operationsHeader: ['codigo', 'operacao', 'meta'],
+      operations: data.operations.map((o) => [o.codigo, o.operacao, o.meta]),
+      matchesHeader: ['codigo', 'data', 'horario', 'mandante', 'visitante'],
+      matches: data.matches.map((m) => [m.id, m.data, m.horario, m.mandante, m.visitante]),
+      assignmentsHeader: ['id', 'jogoId', 'cpf', 'operacaoCodigo', 'funcao'],
+      assignments: (data.assignments || []).map((a) => [a.id, a.matchId, a.cpf, a.operacaoCodigo, a.funcao || '']),
+    };
+
+    let scriptSuccess = false;
 
     // 1. Try Apps Script Web App if URL configured (ZERO login required!)
     if (scriptUrl && scriptUrl.startsWith('http')) {
-      const payload = {
-        sheetId: cleanSheetId,
-        salesHeader: ['codigo', 'data', 'mandante', 'visitante', 'operacao', 'venda'],
-        sales: data.sales.map((s) => [s.codigo, s.data, s.mandante, s.visitante, s.operacao, s.venda]),
-        employeesHeader: ['cpf', 'nome', 'email', 'celular', 'setor', 'empresa', 'funcao'],
-        employees: data.employees.map((e) => [e.cpf, e.nome, e.email, e.celular, e.setor, e.empresa, e.funcaoDefault || 'Atendente']),
-        operationsHeader: ['codigo', 'operacao', 'meta'],
-        operations: data.operations.map((o) => [o.codigo, o.operacao, o.meta]),
-        matchesHeader: ['codigo', 'data', 'horario', 'mandante', 'visitante'],
-        matches: data.matches.map((m) => [m.id, m.data, m.horario, m.mandante, m.visitante]),
-        assignmentsHeader: ['id', 'jogoId', 'cpf', 'operacaoCodigo', 'funcao'],
-        assignments: (data.assignments || []).map((a) => [a.id, a.matchId, a.cpf, a.operacaoCodigo, a.funcao || '']),
-      };
-
-      await fetch(scriptUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload),
-      });
-
-      return {
-        success: true,
-        message: 'Sincronizado automaticamente com a Planilha via Web App (Sem Login)!',
-      };
+      try {
+        await fetch(scriptUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload),
+        });
+        scriptSuccess = true;
+      } catch (err) {
+        console.warn('Erro enviando via Apps Script:', err);
+      }
     }
 
     // 2. If OAuth token available, use Google Sheets API v4
@@ -185,10 +197,17 @@ export async function pushAllToGoogleSheets(
       };
     }
 
+    if (scriptSuccess) {
+      return {
+        success: true,
+        message: 'Dados enviados para a Planilha via Web App!',
+      };
+    }
+
     // 3. Neither Apps Script URL nor OAuth token is configured
     return {
       success: false,
-      message: 'Para enviar dados para a planilha sem login, cole o Link do Web App da sua planilha na aba "Google Sheets". (Código gratuito e simples disponível na tela!)',
+      message: 'Para enviar dados para a planilha sem login, cole o Link do Web App da sua planilha.',
     };
   } catch (error: any) {
     console.error('Erro na sincronização com Google Sheets:', error);

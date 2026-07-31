@@ -58,27 +58,37 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  const appsScriptCode = `function doPost(e) {
+  const appsScriptCode = `function doGet(e) {
+  if (e && e.parameter && e.parameter.payload) {
+    return doPost(e);
+  }
+  return ContentService.createTextOutput(JSON.stringify({ status: "ok", message: "Web App do Fluminense App está ativo!" })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
   try {
-    var contents = e.postData ? e.postData.contents : "";
+    var contents = "";
+    if (e && e.postData && e.postData.contents) {
+      contents = e.postData.contents;
+    } else if (e && e.parameter && e.parameter.payload) {
+      contents = e.parameter.payload;
+    }
     var data = contents ? JSON.parse(contents) : {};
     
     var ss = null;
-    if (data.sheetId) {
+    try { ss = SpreadsheetApp.getActiveSpreadsheet(); } catch(err) {}
+    if (!ss && data.sheetId) {
       try { ss = SpreadsheetApp.openById(data.sheetId); } catch(err) {}
-    }
-    if (!ss) {
-      try { ss = SpreadsheetApp.getActiveSpreadsheet(); } catch(err) {}
     }
     if (!ss) {
       return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Planilha não encontrada." })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    if (data.sales) updateSheet(ss, "Venda", data.salesHeader, data.sales);
-    if (data.employees) updateSheet(ss, "Funcionarios", data.employeesHeader, data.employees);
-    if (data.operations) updateSheet(ss, "Operacoes", data.operationsHeader, data.operations);
-    if (data.matches) updateSheet(ss, "Jogos", data.matchesHeader, data.matches);
-    if (data.assignments) updateSheet(ss, "Escala", data.assignmentsHeader, data.assignments);
+    if (data.sales && data.sales.length > 0) updateSheet(ss, "Venda", data.salesHeader, data.sales);
+    if (data.employees && data.employees.length > 0) updateSheet(ss, "Funcionarios", data.employeesHeader, data.employees);
+    if (data.operations && data.operations.length > 0) updateSheet(ss, "Operacoes", data.operationsHeader, data.operations);
+    if (data.matches && data.matches.length > 0) updateSheet(ss, "Jogos", data.matchesHeader, data.matches);
+    if (data.assignments && data.assignments.length > 0) updateSheet(ss, "Escala", data.assignmentsHeader, data.assignments);
 
     return ContentService.createTextOutput(JSON.stringify({ status: "success" })).setMimeType(ContentService.MimeType.JSON);
   } catch(err) {
@@ -392,7 +402,7 @@ function updateSheet(ss, sheetName, headers, rows) {
           </div>
           <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
             <span className="font-bold text-slate-900 block mb-1">Passo 3: Implantar Web App</span>
-            Clique em <strong>Implantar</strong> &gt; <strong>Nova Implantação</strong> &gt; Tipo: <strong>App da Web</strong> &gt; Quem pode acessar: <strong>Qualquer pessoa</strong>.
+            Clique em <strong>Implantar</strong> &gt; <strong>Nova Implantação</strong> (ou Gerenciar implantações &gt; Nova Versão) &gt; <strong>App da Web</strong> &gt; Quem pode acessar: <strong>Qualquer pessoa</strong>.
           </div>
         </div>
 
