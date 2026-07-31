@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, Users, PlusCircle, Trash2, Search, CheckCircle2, Trophy, Briefcase, FileSpreadsheet } from 'lucide-react';
+import { Users, PlusCircle, Trash2, Search, CheckCircle2, FileSpreadsheet } from 'lucide-react';
 import { Match, Operation, Employee, Assignment } from '../types';
 import { generateEmployeeAssignmentsXLSX } from '../lib/excel';
 
@@ -10,6 +10,7 @@ interface AssignmentsViewProps {
   matches: Match[];
   activeMatchId: string;
   onAddAssignment: (assignment: Assignment) => void;
+  onUpdateAssignment?: (assignment: Assignment) => void;
   onRemoveAssignment: (id: string) => void;
 }
 
@@ -20,13 +21,13 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   matches,
   activeMatchId,
   onAddAssignment,
+  onUpdateAssignment,
   onRemoveAssignment,
 }) => {
   const selectedMatch = matches.find((m) => m.id === activeMatchId) || matches[0];
 
   const [selectedCpf, setSelectedCpf] = useState<string>('');
   const [selectedOpCodigo, setSelectedOpCodigo] = useState<string>('');
-  const [funcaoInput, setFuncaoInput] = useState<string>('Atendente');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [message, setMessage] = useState<string | null>(null);
@@ -41,13 +42,8 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
     }
   }, [operations, employees]);
 
-  // When selecting an employee, default to their default role if present
   const handleEmployeeSelect = (cpf: string) => {
     setSelectedCpf(cpf);
-    const emp = employees.find((e) => e.cpf === cpf);
-    if (emp && emp.funcaoDefault) {
-      setFuncaoInput(emp.funcaoDefault);
-    }
   };
 
   const handleAddAssignment = (e: React.FormEvent) => {
@@ -70,7 +66,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
       matchId: selectedMatch.id,
       cpf: selectedCpf,
       operacaoCodigo: selectedOpCodigo,
-      funcao: funcaoInput.trim() || 'Atendente',
+      funcao: '', // Default to empty as requested
     };
 
     onAddAssignment(newAssignment);
@@ -90,7 +86,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
       emp?.nome.toLowerCase().includes(q) ||
       emp?.cpf.includes(q) ||
       op?.operacao.toLowerCase().includes(q) ||
-      asg.funcao.toLowerCase().includes(q)
+      (asg.funcao && asg.funcao.toLowerCase().includes(q))
     );
   });
 
@@ -108,7 +104,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
             Escala de Funcionários por Operação
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Selecione o funcionário, a operação e a função para gerar a planilha oficial em XLSX
+            Selecione o funcionário e a operação para montar a escala do jogo
           </p>
         </div>
 
@@ -135,14 +131,14 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
         </div>
       )}
 
-      {/* Assignment Add Form */}
+      {/* Assignment Add Form - Only Employee and Operation */}
       <form onSubmit={handleAddAssignment} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
         <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
           <PlusCircle className="w-4 h-4 text-[#8A0029]" />
           Adicionar Funcionário na Escala do Jogo
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Select Employee */}
           <div>
             <label className="block text-xs font-bold text-slate-600 mb-1">
@@ -180,20 +176,6 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
               ))}
             </select>
           </div>
-
-          {/* Function / Role */}
-          <div>
-            <label className="block text-xs font-bold text-slate-600 mb-1">
-              Função no Dia do Jogo:
-            </label>
-            <input
-              type="text"
-              placeholder="Ex: Supervisor, Caixa, Atendente, Apoio"
-              value={funcaoInput}
-              onChange={(e) => setFuncaoInput(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-[#8A0029] focus:outline-none"
-            />
-          </div>
         </div>
 
         <div className="flex justify-end pt-2">
@@ -207,6 +189,19 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
           </button>
         </div>
       </form>
+
+      {/* Datalist for fast function selection in table */}
+      <datalist id="funcoes-list">
+        <option value="Gestor" />
+        <option value="Atendente" />
+        <option value="Supervisor" />
+        <option value="Caixa" />
+        <option value="Apoio" />
+        <option value="Orientador" />
+        <option value="Fiscal" />
+        <option value="Líder" />
+        <option value="Coordenador" />
+      </datalist>
 
       {/* Escala Table */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
@@ -282,8 +277,23 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                       <td className="py-3 px-4 font-semibold text-[#8A0029]">
                         {op?.operacao || 'N/A'}
                       </td>
-                      <td className="py-3 px-4 font-semibold text-emerald-800 bg-emerald-50/50 rounded">
-                        {asg.funcao}
+                      <td className="py-2.5 px-4">
+                        <input
+                          type="text"
+                          list="funcoes-list"
+                          placeholder="Vazio"
+                          value={asg.funcao || ''}
+                          onChange={(e) => {
+                            if (onUpdateAssignment) {
+                              onUpdateAssignment({ ...asg, funcao: e.target.value });
+                            }
+                          }}
+                          className={`w-32 border rounded-lg px-2.5 py-1 text-xs focus:ring-2 focus:ring-[#006633] focus:outline-none transition-all ${
+                            asg.funcao
+                              ? 'bg-emerald-50 text-emerald-950 border-emerald-300 font-bold'
+                              : 'bg-slate-50 text-slate-400 border-slate-200'
+                          }`}
+                        />
                       </td>
                       <td className="py-3 px-4 text-right">
                         <button

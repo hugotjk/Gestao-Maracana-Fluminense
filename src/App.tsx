@@ -176,6 +176,12 @@ export default function App() {
     saveAssignments(next);
   };
 
+  const handleUpdateAssignment = (asg: Assignment) => {
+    const next = assignments.map((item) => (item.id === asg.id ? asg : item));
+    setAssignmentsState(next);
+    saveAssignments(next);
+  };
+
   const handleRemoveAssignment = (id: string) => {
     const next = assignments.filter((item) => item.id !== id);
     setAssignmentsState(next);
@@ -272,6 +278,7 @@ export default function App() {
             matches={matches}
             activeMatchId={activeMatchId}
             onAddAssignment={handleAddAssignment}
+            onUpdateAssignment={handleUpdateAssignment}
             onRemoveAssignment={handleRemoveAssignment}
           />
         )}

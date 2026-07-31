@@ -32,7 +32,7 @@ export function generateEmployeeAssignmentsXLSX(
       celular: emp ? emp.celular : '',
       setor: emp ? emp.setor : '1,2,3,4,5,6',
       empresa: emp ? emp.empresa : 'FMS',
-      funcao: asg.funcao || emp?.funcaoDefault || 'Atendente',
+      funcao: asg.funcao || '',
     };
   });
 
