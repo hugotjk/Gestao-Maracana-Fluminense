@@ -8,6 +8,7 @@ const STORAGE_KEYS = {
   SALES: 'flu_app_sales',
   ACTIVE_MATCH_ID: 'flu_app_active_match_id',
   SHEET_ID: 'flu_app_sheet_id',
+  SCRIPT_URL: 'flu_app_script_url',
 };
 
 export const DEFAULT_SHEET_ID = '1LSacDLpH7y4M8s2H8627FnAxS0IvFe54ACK9rE4BErs';
@@ -125,6 +126,14 @@ export function getSpreadsheetId(): string {
 
 export function setSpreadsheetId(id: string) {
   localStorage.setItem(STORAGE_KEYS.SHEET_ID, id.trim());
+}
+
+export function getScriptUrl(): string {
+  return localStorage.getItem(STORAGE_KEYS.SCRIPT_URL) || '';
+}
+
+export function setScriptUrl(url: string) {
+  localStorage.setItem(STORAGE_KEYS.SCRIPT_URL, url.trim());
 }
 
 export function generateNextSaleCode(existingSales: Sale[]): string {
