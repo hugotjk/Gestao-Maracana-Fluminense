@@ -78,8 +78,23 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
       if (res) {
         setUser(res.user);
         setToken(res.accessToken);
-        setStatusMessage({ type: 'success', text: `Conectado como ${res.user.displayName || res.user.email}!` });
-        setTimeout(() => setStatusMessage(null), 4000);
+        setStatusMessage({ type: 'info', text: 'Conectado ao Google! Enviando cadastros para a planilha...' });
+
+        const syncRes = await pushAllToGoogleSheets(sheetIdInput, res.accessToken, {
+          sales,
+          employees,
+          operations,
+          matches,
+        });
+
+        if (syncRes.success) {
+          setStatusMessage({
+            type: 'success',
+            text: `Conectado como ${res.user.displayName || res.user.email}! A partir de agora, qualquer novo cadastro alimentará a planilha AUTOMATICAMENTE.`,
+          });
+        } else {
+          setStatusMessage({ type: 'error', text: syncRes.message });
+        }
       }
     } catch (err: any) {
       console.error('Login error:', err);
@@ -206,10 +221,10 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
         <div className="space-y-1">
           <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
             <UserIcon className="w-4 h-4 text-[#006633]" />
-            Autenticação da Conta Google
+            Autenticação Google (Sincronização Automática)
           </h3>
           <p className="text-xs text-slate-500">
-            Conecte sua conta Google para autorizar o acesso à sua planilha do Google Sheets.
+            Conecte sua conta Google uma vez. Ao cadastrar vendas, funcionários, setores ou jogos, o aplicativo alimentará sua planilha no Google Sheets <strong>automaticamente em tempo real</strong>, sem precisar clicar para enviar!
           </p>
         </div>
 

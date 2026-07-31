@@ -8,7 +8,7 @@ export interface SyncStatus {
 }
 
 /**
- * Pushes local data directly to Google Sheets API using user OAuth access token
+ * Pushes local data directly to Google Sheets API using user OAuth access token or Web App
  */
 export async function pushAllToGoogleSheets(
   spreadsheetId: string,
@@ -26,10 +26,17 @@ export async function pushAllToGoogleSheets(
       throw new Error('ID da Planilha não foi informado.');
     }
 
+    if (!accessToken) {
+      return {
+        success: false,
+        message: 'Atenção: Faça login na sua Conta Google clicando em "Entrar com o Google" para permitir que o app atualize sua planilha automaticamente.',
+      };
+    }
+
     // Helper to clear and update a tab
     const updateTab = async (range: string, values: any[][]) => {
       // Clear
-      await fetch(
+      const clearRes = await fetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${cleanSheetId}/values/${encodeURIComponent(
           range
         )}:clear`,
@@ -41,6 +48,11 @@ export async function pushAllToGoogleSheets(
           },
         }
       );
+
+      if (!clearRes.ok) {
+        const errData = await clearRes.json().catch(() => ({}));
+        throw new Error(errData?.error?.message || `Não foi possível acessar a aba ${range}. Verifique se você está conectado com a Conta Google dona da planilha.`);
+      }
 
       // Append/Update
       const response = await fetch(
@@ -62,7 +74,7 @@ export async function pushAllToGoogleSheets(
       );
 
       if (!response.ok) {
-        const errData = await response.json();
+        const errData = await response.json().catch(() => ({}));
         throw new Error(errData?.error?.message || `Erro ao atualizar a aba ${range}`);
       }
     };
@@ -112,7 +124,7 @@ export async function pushAllToGoogleSheets(
 
     return {
       success: true,
-      message: 'Planilha do Google Sheets sincronizada com sucesso!',
+      message: 'Planilha do Google Sheets alimentada e sincronizada com sucesso!',
     };
   } catch (error: any) {
     console.error('Erro na sincronização com Google Sheets:', error);
