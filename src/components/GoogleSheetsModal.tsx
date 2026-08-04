@@ -27,18 +27,20 @@ import {
 import { pushAllToGoogleSheets, pullFromGoogleSheets } from '../lib/googleSheets';
 import { exportFullDatabaseXLSX } from '../lib/excel';
 import { googleSignIn, logout, initAuth, getAccessToken } from '../lib/auth';
-import { Sale, Employee, Operation, Match } from '../types';
+import { Sale, Employee, Operation, Match, Assignment } from '../types';
 
 interface GoogleSheetsModalProps {
   sales: Sale[];
   employees: Employee[];
   operations: Operation[];
   matches: Match[];
+  assignments?: Assignment[];
   onImportData: (data: {
     sales: Sale[];
     employees: Employee[];
     operations: Operation[];
     matches: Match[];
+    assignments?: Assignment[];
   }) => void;
 }
 
@@ -47,6 +49,7 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
   employees,
   operations,
   matches,
+  assignments = [],
   onImportData,
 }) => {
   const [sheetIdInput, setSheetIdInput] = useState<string>(getSpreadsheetId());
@@ -239,7 +242,7 @@ function updateSheet(ss, sheetName, headers, rows) {
       employees,
       operations,
       matches,
-      assignments: getStoredAssignments(),
+      assignments,
     });
 
     setIsSyncing(false);

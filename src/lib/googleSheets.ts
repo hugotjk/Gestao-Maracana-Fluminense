@@ -91,8 +91,8 @@ export async function pushAllToGoogleSheets(
       sheetId: cleanSheetId,
       salesHeader: ['codigo', 'data', 'mandante', 'visitante', 'operacao', 'venda'],
       sales: data.sales.map((s) => [s.codigo, s.data, s.mandante, s.visitante, s.operacao, s.venda]),
-      employeesHeader: ['cpf', 'nome', 'email', 'celular', 'setor', 'empresa', 'funcao'],
-      employees: data.employees.map((e) => [e.cpf, e.nome, e.email, e.celular, e.setor, e.empresa, e.funcaoDefault || 'Atendente']),
+      employeesHeader: ['cpf', 'nome', 'email', 'celular', 'setor', 'empresa', 'funcao', 'favorito'],
+      employees: data.employees.map((e) => [e.cpf, e.nome, e.email, e.celular, e.setor, e.empresa, e.funcaoDefault || 'Atendente', e.favorito ? 'Sim' : 'Não']),
       operationsHeader: ['codigo', 'operacao', 'meta'],
       operations: data.operations.map((o) => [o.codigo, o.operacao, o.meta]),
       matchesHeader: ['codigo', 'data', 'horario', 'mandante', 'visitante'],
@@ -166,9 +166,9 @@ export async function pushAllToGoogleSheets(
       ]);
 
       // Aba Funcionarios
-      await updateTab('Funcionarios!A1:G', [
-        ['cpf', 'nome', 'email', 'celular', 'setor', 'empresa', 'funcao'],
-        ...data.employees.map((e) => [e.cpf, e.nome, e.email, e.celular, e.setor, e.empresa, e.funcaoDefault || 'Atendente']),
+      await updateTab('Funcionarios!A1:H', [
+        ['cpf', 'nome', 'email', 'celular', 'setor', 'empresa', 'funcao', 'favorito'],
+        ...data.employees.map((e) => [e.cpf, e.nome, e.email, e.celular, e.setor, e.empresa, e.funcaoDefault || 'Atendente', e.favorito ? 'Sim' : 'Não']),
       ]);
 
       // Aba Operacoes
@@ -273,11 +273,13 @@ export async function pullFromGoogleSheets(
       return json.values || [];
     };
 
-    const vendaRows = await fetchSheetRows('Venda');
-    const funcRows = await fetchSheetRows('Funcionarios');
-    const opsRows = await fetchSheetRows('Operacoes');
-    const jogosRows = await fetchSheetRows('Jogos');
-    const escalaRows = await fetchSheetRows('Escala');
+    const [vendaRows, funcRows, opsRows, jogosRows, escalaRows] = await Promise.all([
+      fetchSheetRows('Venda'),
+      fetchSheetRows('Funcionarios'),
+      fetchSheetRows('Operacoes'),
+      fetchSheetRows('Jogos'),
+      fetchSheetRows('Escala'),
+    ]);
 
     // Parse Vendas
     const sales: Sale[] = [];
@@ -303,6 +305,7 @@ export async function pullFromGoogleSheets(
       for (let i = 1; i < funcRows.length; i++) {
         const row = funcRows[i];
         if (row && (row[0] || row[1])) {
+          const isFav = row[7] === 'Sim' || row[7] === 'true' || row[7] === '1';
           employees.push({
             cpf: row[0] || `0000000000${i}`,
             nome: row[1] || `Funcionário ${i}`,
@@ -311,6 +314,7 @@ export async function pullFromGoogleSheets(
             setor: row[4] || '1,2,3,4,5,6',
             empresa: row[5] || 'FMS',
             funcaoDefault: row[6] || 'Atendente',
+            favorito: isFav,
           });
         }
       }

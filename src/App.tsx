@@ -62,34 +62,37 @@ export default function App() {
     // Try pulling latest data from Google Sheets on load (e.g. for new devices or cross-device sync)
     const sheetId = getSpreadsheetId();
     if (sheetId) {
-      pullFromGoogleSheets(sheetId).then((res) => {
-        if (res.success && res.data) {
-          if (res.data.assignments && res.data.assignments.length > 0) {
-            setAssignmentsState(res.data.assignments);
-            saveAssignments(res.data.assignments);
+      setIsSyncing(true);
+      pullFromGoogleSheets(sheetId)
+        .then((res) => {
+          if (res.success && res.data) {
+            if (res.data.assignments) {
+              setAssignmentsState(res.data.assignments);
+              saveAssignments(res.data.assignments);
+            }
+            if (res.data.employees) {
+              const sorted = sortEmployees(res.data.employees);
+              setEmployeesState(sorted);
+              saveEmployees(sorted);
+            }
+            if (res.data.matches) {
+              const sorted = sortMatchesByDate(res.data.matches);
+              setMatchesState(sorted);
+              saveMatches(sorted);
+            }
+            if (res.data.operations) {
+              setOperationsState(res.data.operations);
+              saveOperations(res.data.operations);
+            }
+            if (res.data.sales) {
+              setSalesState(res.data.sales);
+              saveSales(res.data.sales);
+            }
           }
-          if (res.data.employees && res.data.employees.length > 0) {
-            setEmployeesState(res.data.employees);
-            saveEmployees(res.data.employees);
-          }
-          if (res.data.matches && res.data.matches.length > 0) {
-            setMatchesState(res.data.matches);
-            saveMatches(res.data.matches);
-          }
-          if (res.data.operations && res.data.operations.length > 0) {
-            setOperationsState(res.data.operations);
-            saveOperations(res.data.operations);
-          }
-          if (res.data.sales && res.data.sales.length > 0) {
-            setSalesState(res.data.sales);
-            saveSales(res.data.sales);
-          }
-        }
-      }).catch((err) => console.warn('Auto pull on load error:', err));
+        })
+        .catch((err) => console.warn('Auto pull on load error:', err))
+        .finally(() => setIsSyncing(false));
     }
-
-    // Initial sync with Web App on load
-    triggerAutoSync(loadedSales, loadedEmployees, loadedOperations, loadedMatches, loadedAssignments);
 
     const unsubscribe = initAuth(
       (_user, token) => {
@@ -367,6 +370,7 @@ export default function App() {
             employees={employees}
             operations={operations}
             matches={matches}
+            assignments={assignments}
             onImportData={handleImportData}
           />
         )}
