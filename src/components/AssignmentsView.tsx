@@ -180,24 +180,22 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
-          <div className="flex-1 min-h-[38px] flex items-center">
-            {message && (
-              <div className="w-full p-2.5 bg-amber-50 border border-amber-300 text-amber-900 rounded-xl text-xs font-semibold flex items-center gap-2 animate-fadeIn">
-                <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>{message}</span>
-              </div>
-            )}
-          </div>
-
+        <div className="flex flex-wrap items-center gap-3 pt-2">
           <button
             type="submit"
             disabled={employees.length === 0 || operations.length === 0}
-            className="flex items-center justify-center gap-2 bg-[#8A0029] hover:bg-[#6A001F] text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm shrink-0 self-end sm:self-auto"
+            className="flex items-center justify-center gap-2 bg-[#8A0029] hover:bg-[#6A001F] text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm shrink-0"
           >
             <PlusCircle className="w-4 h-4" />
             Escalar Funcionário
           </button>
+
+          {message && (
+            <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-300 text-amber-900 rounded-xl text-xs font-semibold px-4 py-2.5 shadow-sm transition-all">
+              <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>{message}</span>
+            </div>
+          )}
         </div>
       </form>
 
