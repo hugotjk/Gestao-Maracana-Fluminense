@@ -1,4 +1,4 @@
-import { Match, Operation, Employee, Assignment, Sale } from '../types';
+import { Match, Operation, Employee, Assignment, Sale, PendingTask } from '../types';
 
 const STORAGE_KEYS = {
   MATCHES: 'flu_app_matches',
@@ -6,6 +6,7 @@ const STORAGE_KEYS = {
   EMPLOYEES: 'flu_app_employees',
   ASSIGNMENTS: 'flu_app_assignments',
   SALES: 'flu_app_sales',
+  PENDING_TASKS: 'flu_app_pending_tasks',
   ACTIVE_MATCH_ID: 'flu_app_active_match_id',
   SHEET_ID: 'flu_app_sheet_id',
   SCRIPT_URL: 'flu_app_script_url',
@@ -185,11 +186,35 @@ export function generateNextOperationCode(existingOps: Operation[]): string {
   return `O${String(nextNum).padStart(9, '0')}`;
 }
 
+export function sortPendingTasks(tasks: PendingTask[]): PendingTask[] {
+  const pending = tasks.filter((t) => !t.concluida).sort((a, b) => (a.titulo || '').localeCompare(b.titulo || '', 'pt-BR', { sensitivity: 'base' }));
+  const completed = tasks.filter((t) => t.concluida).sort((a, b) => (a.titulo || '').localeCompare(b.titulo || '', 'pt-BR', { sensitivity: 'base' }));
+  return [...pending, ...completed];
+}
+
+export function getStoredPendingTasks(): PendingTask[] {
+  const data = localStorage.getItem(STORAGE_KEYS.PENDING_TASKS);
+  if (!data) {
+    return [];
+  }
+  try {
+    return sortPendingTasks(JSON.parse(data));
+  } catch {
+    return [];
+  }
+}
+
+export function savePendingTasks(tasks: PendingTask[]) {
+  const sorted = sortPendingTasks(tasks);
+  localStorage.setItem(STORAGE_KEYS.PENDING_TASKS, JSON.stringify(sorted));
+}
+
 export function clearAllLocalData() {
   localStorage.removeItem(STORAGE_KEYS.MATCHES);
   localStorage.removeItem(STORAGE_KEYS.OPERATIONS);
   localStorage.removeItem(STORAGE_KEYS.EMPLOYEES);
   localStorage.removeItem(STORAGE_KEYS.ASSIGNMENTS);
   localStorage.removeItem(STORAGE_KEYS.SALES);
+  localStorage.removeItem(STORAGE_KEYS.PENDING_TASKS);
   localStorage.removeItem(STORAGE_KEYS.ACTIVE_MATCH_ID);
 }

@@ -27,7 +27,7 @@ import {
 import { pushAllToGoogleSheets, pullFromGoogleSheets } from '../lib/googleSheets';
 import { exportFullDatabaseXLSX } from '../lib/excel';
 import { googleSignIn, logout, initAuth, getAccessToken } from '../lib/auth';
-import { Sale, Employee, Operation, Match, Assignment } from '../types';
+import { Sale, Employee, Operation, Match, Assignment, PendingTask } from '../types';
 
 interface GoogleSheetsModalProps {
   sales: Sale[];
@@ -35,12 +35,14 @@ interface GoogleSheetsModalProps {
   operations: Operation[];
   matches: Match[];
   assignments?: Assignment[];
+  pendingTasks?: PendingTask[];
   onImportData: (data: {
     sales: Sale[];
     employees: Employee[];
     operations: Operation[];
     matches: Match[];
     assignments?: Assignment[];
+    pendingTasks?: PendingTask[];
   }) => void;
 }
 
@@ -50,6 +52,7 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
   operations,
   matches,
   assignments = [],
+  pendingTasks = [],
   onImportData,
 }) => {
   const [sheetIdInput, setSheetIdInput] = useState<string>(getSpreadsheetId());
@@ -243,6 +246,7 @@ function updateSheet(ss, sheetName, headers, rows) {
       operations,
       matches,
       assignments,
+      pendingTasks,
     });
 
     setIsSyncing(false);

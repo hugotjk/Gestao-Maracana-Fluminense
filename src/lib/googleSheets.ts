@@ -1,4 +1,4 @@
-import { Sale, Employee, Operation, Match, Assignment } from '../types';
+import { Sale, Employee, Operation, Match, Assignment, PendingTask } from '../types';
 import { getScriptUrl } from './storage';
 
 export interface SyncStatus {
@@ -78,6 +78,7 @@ export async function pushAllToGoogleSheets(
     operations: Operation[];
     matches: Match[];
     assignments?: Assignment[];
+    pendingTasks?: PendingTask[];
   }
 ): Promise<{ success: boolean; message: string }> {
   try {
@@ -99,6 +100,8 @@ export async function pushAllToGoogleSheets(
       matches: data.matches.map((m) => [m.id, m.data, m.horario, m.mandante, m.visitante]),
       assignmentsHeader: ['id', 'jogoId', 'cpf', 'operacaoCodigo', 'funcao'],
       assignments: (data.assignments || []).map((a) => [a.id, a.matchId, a.cpf, a.operacaoCodigo, a.funcao || '']),
+      pendenciasHeader: ['id', 'jogoId', 'titulo', 'concluida', 'observacao', 'dataCriacao'],
+      pendencias: (data.pendingTasks || []).map((t) => [t.id, t.matchId, t.titulo, t.concluida ? 'Sim' : 'Não', t.observacao || '', t.dataCriacao || '']),
     };
 
     let scriptSuccess = false;
@@ -191,6 +194,14 @@ export async function pushAllToGoogleSheets(
         ]);
       }
 
+      // Aba Pendencias (if pendingTasks exist)
+      if (data.pendingTasks && data.pendingTasks.length > 0) {
+        await updateTab('Pendencias!A1:F', [
+          ['id', 'jogoId', 'titulo', 'concluida', 'observacao', 'dataCriacao'],
+          ...data.pendingTasks.map((t) => [t.id, t.matchId, t.titulo, t.concluida ? 'Sim' : 'Não', t.observacao || '', t.dataCriacao || '']),
+        ]);
+      }
+
       return {
         success: true,
         message: 'Planilha alimentada com sucesso via Google API!',
@@ -234,6 +245,7 @@ export async function pullFromGoogleSheets(
     operations: Operation[];
     matches: Match[];
     assignments?: Assignment[];
+    pendingTasks?: PendingTask[];
   };
 }> {
   try {
@@ -273,12 +285,13 @@ export async function pullFromGoogleSheets(
       return json.values || [];
     };
 
-    const [vendaRows, funcRows, opsRows, jogosRows, escalaRows] = await Promise.all([
+    const [vendaRows, funcRows, opsRows, jogosRows, escalaRows, pendenciasRows] = await Promise.all([
       fetchSheetRows('Venda'),
       fetchSheetRows('Funcionarios'),
       fetchSheetRows('Operacoes'),
       fetchSheetRows('Jogos'),
       fetchSheetRows('Escala'),
+      fetchSheetRows('Pendencias'),
     ]);
 
     // Parse Vendas
@@ -369,10 +382,29 @@ export async function pullFromGoogleSheets(
       }
     }
 
+    // Parse Pendencias
+    const pendingTasks: PendingTask[] = [];
+    if (pendenciasRows && pendenciasRows.length > 1) {
+      for (let i = 1; i < pendenciasRows.length; i++) {
+        const row = pendenciasRows[i];
+        if (row && (row[0] || row[1] || row[2])) {
+          const isDone = row[3] === 'Sim' || row[3] === 'true' || row[3] === '1';
+          pendingTasks.push({
+            id: row[0] || `TASK_${Date.now()}_${i}`,
+            matchId: row[1] || '',
+            titulo: row[2] || '',
+            concluida: isDone,
+            observacao: row[4] || '',
+            dataCriacao: row[5] || '',
+          });
+        }
+      }
+    }
+
     return {
       success: true,
       message: 'Dados importados diretamente da planilha pública com sucesso!',
-      data: { sales, employees, operations, matches, assignments },
+      data: { sales, employees, operations, matches, assignments, pendingTasks },
     };
   } catch (error: any) {
     return {

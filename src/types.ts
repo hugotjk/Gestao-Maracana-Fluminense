@@ -41,4 +41,13 @@ export interface Sale {
   matchId?: string;
 }
 
-export type ViewTab = 'dashboard' | 'vendas' | 'escala' | 'funcionarios' | 'operacoes' | 'jogos' | 'configuracoes';
+export interface PendingTask {
+  id: string;
+  matchId: string;
+  titulo: string;
+  concluida: boolean;
+  observacao?: string;
+  dataCriacao?: string;
+}
+
+export type ViewTab = 'dashboard' | 'vendas' | 'escala' | 'funcionarios' | 'operacoes' | 'jogos' | 'pendencias' | 'configuracoes';

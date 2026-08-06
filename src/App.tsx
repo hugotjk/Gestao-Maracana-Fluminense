@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ViewTab, Match, Operation, Employee, Assignment, Sale } from './types';
+import { ViewTab, Match, Operation, Employee, Assignment, Sale, PendingTask } from './types';
 import {
   getStoredMatches,
   saveMatches,
@@ -11,6 +11,9 @@ import {
   saveAssignments,
   getStoredSales,
   saveSales,
+  getStoredPendingTasks,
+  savePendingTasks,
+  sortPendingTasks,
   getActiveMatchId,
   setActiveMatchId,
   getSpreadsheetId,
@@ -28,6 +31,7 @@ import { AssignmentsView } from './components/AssignmentsView';
 import { EmployeesView } from './components/EmployeesView';
 import { OperationsView } from './components/OperationsView';
 import { MatchesView } from './components/MatchesView';
+import { PendingTasksView } from './components/PendingTasksView';
 import { GoogleSheetsModal } from './components/GoogleSheetsModal';
 
 export default function App() {
@@ -39,6 +43,7 @@ export default function App() {
   const [employees, setEmployeesState] = useState<Employee[]>([]);
   const [assignments, setAssignmentsState] = useState<Assignment[]>([]);
   const [sales, setSalesState] = useState<Sale[]>([]);
+  const [pendingTasks, setPendingTasksState] = useState<PendingTask[]>([]);
   const [activeMatchId, setActiveMatchIdState] = useState<string>('');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [authToken, setAuthToken] = useState<string | null>(null);
@@ -50,6 +55,7 @@ export default function App() {
     const loadedEmployees = getStoredEmployees();
     const loadedAssignments = getStoredAssignments();
     const loadedSales = getStoredSales();
+    const loadedPendingTasks = getStoredPendingTasks();
     const loadedActiveId = getActiveMatchId();
 
     setMatchesState(loadedMatches);
@@ -57,6 +63,7 @@ export default function App() {
     setEmployeesState(loadedEmployees);
     setAssignmentsState(loadedAssignments);
     setSalesState(loadedSales);
+    setPendingTasksState(loadedPendingTasks);
     setActiveMatchIdState(loadedActiveId);
 
     // Try pulling latest data from Google Sheets on load (e.g. for new devices or cross-device sync)
@@ -88,6 +95,11 @@ export default function App() {
               setSalesState(res.data.sales);
               saveSales(res.data.sales);
             }
+            if (res.data.pendingTasks) {
+              const sorted = sortPendingTasks(res.data.pendingTasks);
+              setPendingTasksState(sorted);
+              savePendingTasks(sorted);
+            }
           }
         })
         .catch((err) => console.warn('Auto pull on load error:', err))
@@ -113,7 +125,8 @@ export default function App() {
       latestEmployees: Employee[],
       latestOperations: Operation[],
       latestMatches: Match[],
-      latestAssignments?: Assignment[]
+      latestAssignments?: Assignment[],
+      latestPendingTasks?: PendingTask[]
     ) => {
       try {
         const token = authToken || (await getAccessToken());
@@ -128,6 +141,7 @@ export default function App() {
             operations: latestOperations,
             matches: latestMatches,
             assignments: latestAssignments || assignments,
+            pendingTasks: latestPendingTasks || pendingTasks,
           });
         }
       } catch (err) {
@@ -136,7 +150,7 @@ export default function App() {
         setIsSyncing(false);
       }
     },
-    [authToken, assignments]
+    [authToken, assignments, pendingTasks]
   );
 
   // Set active match
@@ -247,6 +261,29 @@ export default function App() {
     triggerAutoSync(next, employees, operations, matches);
   };
 
+  // Pending tasks operations
+  const handleAddPendingTask = (task: PendingTask) => {
+    const next = sortPendingTasks([...pendingTasks, task]);
+    setPendingTasksState(next);
+    savePendingTasks(next);
+    triggerAutoSync(sales, employees, operations, matches, assignments, next);
+  };
+
+  const handleUpdatePendingTask = (task: PendingTask) => {
+    const updatedList = pendingTasks.map((t) => (t.id === task.id ? task : t));
+    const next = sortPendingTasks(updatedList);
+    setPendingTasksState(next);
+    savePendingTasks(next);
+    triggerAutoSync(sales, employees, operations, matches, assignments, next);
+  };
+
+  const handleDeletePendingTask = (id: string) => {
+    const next = sortPendingTasks(pendingTasks.filter((t) => t.id !== id));
+    setPendingTasksState(next);
+    savePendingTasks(next);
+    triggerAutoSync(sales, employees, operations, matches, assignments, next);
+  };
+
   // Bulk import from Google Sheets
   const handleImportData = (data: {
     sales: Sale[];
@@ -254,12 +291,14 @@ export default function App() {
     operations: Operation[];
     matches: Match[];
     assignments?: Assignment[];
+    pendingTasks?: PendingTask[];
   }) => {
     let newSales = sales;
     let newEmployees = employees;
     let newOperations = operations;
     let newMatches = matches;
     let newAssignments = assignments;
+    let newPendingTasks = pendingTasks;
 
     if (data.sales && data.sales.length > 0) {
       newSales = data.sales;
@@ -286,8 +325,13 @@ export default function App() {
       setAssignmentsState(newAssignments);
       saveAssignments(newAssignments);
     }
+    if (data.pendingTasks && data.pendingTasks.length > 0) {
+      newPendingTasks = sortPendingTasks(data.pendingTasks);
+      setPendingTasksState(newPendingTasks);
+      savePendingTasks(newPendingTasks);
+    }
 
-    triggerAutoSync(newSales, newEmployees, newOperations, newMatches, newAssignments);
+    triggerAutoSync(newSales, newEmployees, newOperations, newMatches, newAssignments, newPendingTasks);
   };
 
   return (
@@ -364,6 +408,18 @@ export default function App() {
           />
         )}
 
+        {currentTab === 'pendencias' && (
+          <PendingTasksView
+            matches={matches}
+            activeMatchId={activeMatchId}
+            onSelectActiveMatch={handleSelectActiveMatch}
+            pendingTasks={pendingTasks}
+            onAddPendingTask={handleAddPendingTask}
+            onUpdatePendingTask={handleUpdatePendingTask}
+            onDeletePendingTask={handleDeletePendingTask}
+          />
+        )}
+
         {currentTab === 'configuracoes' && (
           <GoogleSheetsModal
             sales={sales}
@@ -371,6 +427,7 @@ export default function App() {
             operations={operations}
             matches={matches}
             assignments={assignments}
+            pendingTasks={pendingTasks}
             onImportData={handleImportData}
           />
         )}

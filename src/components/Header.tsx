@@ -9,6 +9,7 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   Trophy,
+  ListChecks,
 } from 'lucide-react';
 import { ViewTab, Match } from '../types';
 
@@ -158,6 +159,19 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Calendar className="w-4 h-4" />
             <span>Jogos</span>
+          </button>
+
+          <button
+            id="nav-tab-pendencias"
+            onClick={() => onSelectTab('pendencias')}
+            className={`flex items-center space-x-2 px-3.5 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all whitespace-nowrap ${
+              currentTab === 'pendencias'
+                ? 'bg-[#006633] text-white shadow-sm ring-1 ring-emerald-400/30'
+                : 'text-rose-100 hover:bg-[#7A0022] hover:text-white'
+            }`}
+          >
+            <ListChecks className="w-4 h-4 text-amber-300" />
+            <span>Pendências</span>
           </button>
 
           <button
