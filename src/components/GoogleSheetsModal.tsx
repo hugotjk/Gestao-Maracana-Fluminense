@@ -23,6 +23,7 @@ import {
   setScriptUrl,
   clearAllLocalData,
   getStoredAssignments,
+  getStoredPendingTasks,
 } from '../lib/storage';
 import { pushAllToGoogleSheets, pullFromGoogleSheets } from '../lib/googleSheets';
 import { exportFullDatabaseXLSX } from '../lib/excel';
@@ -95,6 +96,7 @@ function doPost(e) {
     if (data.operations && data.operations.length > 0) updateSheet(ss, "Operacoes", data.operationsHeader, data.operations);
     if (data.matches && data.matches.length > 0) updateSheet(ss, "Jogos", data.matchesHeader, data.matches);
     if (data.assignments && data.assignments.length > 0) updateSheet(ss, "Escala", data.assignmentsHeader, data.assignments);
+    if (data.pendencias && data.pendencias.length > 0) updateSheet(ss, "Pendencia", data.pendenciasHeader, data.pendencias);
 
     return ContentService.createTextOutput(JSON.stringify({ status: "success" })).setMimeType(ContentService.MimeType.JSON);
   } catch(err) {
@@ -103,7 +105,8 @@ function doPost(e) {
 }
 
 function updateSheet(ss, sheetName, headers, rows) {
-  var sheet = ss.getSheetByName(sheetName) || ss.insertSheet(sheetName);
+  var altName = sheetName === "Pendencia" ? "Pendencias" : (sheetName === "Pendencias" ? "Pendencia" : sheetName);
+  var sheet = ss.getSheetByName(sheetName) || ss.getSheetByName(altName) || ss.insertSheet(sheetName);
   sheet.clear();
   sheet.appendRow(headers);
   if (rows && rows.length > 0) {
@@ -136,6 +139,7 @@ function updateSheet(ss, sheetName, headers, rows) {
         operations,
         matches,
         assignments: getStoredAssignments(),
+        pendingTasks: getStoredPendingTasks(),
       });
 
       setIsSyncing(false);
@@ -193,6 +197,8 @@ function updateSheet(ss, sheetName, headers, rows) {
           employees,
           operations,
           matches,
+          assignments: getStoredAssignments(),
+          pendingTasks: getStoredPendingTasks(),
         });
 
         if (syncRes.success) {

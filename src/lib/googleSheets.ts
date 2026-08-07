@@ -194,12 +194,17 @@ export async function pushAllToGoogleSheets(
         ]);
       }
 
-      // Aba Pendencias (if pendingTasks exist)
+      // Aba Pendencia / Pendencias (if pendingTasks exist)
       if (data.pendingTasks && data.pendingTasks.length > 0) {
-        await updateTab('Pendencias!A1:F', [
+        const rows = [
           ['id', 'jogoId', 'titulo', 'concluida', 'observacao', 'dataCriacao'],
           ...data.pendingTasks.map((t) => [t.id, t.matchId, t.titulo, t.concluida ? 'Sim' : 'Não', t.observacao || '', t.dataCriacao || '']),
-        ]);
+        ];
+        try {
+          await updateTab('Pendencia!A1:F', rows);
+        } catch {
+          await updateTab('Pendencias!A1:F', rows);
+        }
       }
 
       return {
@@ -285,13 +290,31 @@ export async function pullFromGoogleSheets(
       return json.values || [];
     };
 
+    const fetchSheetRowsWithFallback = async (primaryTab: string, secondaryTab?: string): Promise<string[][]> => {
+      try {
+        const rows = await fetchSheetRows(primaryTab);
+        if (rows && rows.length > 0) return rows;
+      } catch (err) {
+        console.warn(`Tentativa de leitura para "${primaryTab}" falhou, tentando fallback...`, err);
+      }
+      if (secondaryTab) {
+        try {
+          const rows = await fetchSheetRows(secondaryTab);
+          if (rows && rows.length > 0) return rows;
+        } catch (err) {
+          console.warn(`Tentativa de leitura para "${secondaryTab}" falhou.`, err);
+        }
+      }
+      return [];
+    };
+
     const [vendaRows, funcRows, opsRows, jogosRows, escalaRows, pendenciasRows] = await Promise.all([
-      fetchSheetRows('Venda'),
-      fetchSheetRows('Funcionarios'),
-      fetchSheetRows('Operacoes'),
-      fetchSheetRows('Jogos'),
-      fetchSheetRows('Escala'),
-      fetchSheetRows('Pendencias'),
+      fetchSheetRowsWithFallback('Venda'),
+      fetchSheetRowsWithFallback('Funcionarios'),
+      fetchSheetRowsWithFallback('Operacoes'),
+      fetchSheetRowsWithFallback('Jogos'),
+      fetchSheetRowsWithFallback('Escala'),
+      fetchSheetRowsWithFallback('Pendencia', 'Pendencias'),
     ]);
 
     // Parse Vendas
