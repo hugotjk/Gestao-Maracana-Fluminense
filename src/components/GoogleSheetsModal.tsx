@@ -91,12 +91,12 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Planilha não encontrada." })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    if (data.sales && data.sales.length > 0) updateSheet(ss, "Venda", data.salesHeader, data.sales);
-    if (data.employees && data.employees.length > 0) updateSheet(ss, "Funcionarios", data.employeesHeader, data.employees);
-    if (data.operations && data.operations.length > 0) updateSheet(ss, "Operacoes", data.operationsHeader, data.operations);
-    if (data.matches && data.matches.length > 0) updateSheet(ss, "Jogos", data.matchesHeader, data.matches);
-    if (data.assignments && data.assignments.length > 0) updateSheet(ss, "Escala", data.assignmentsHeader, data.assignments);
-    if (data.pendencias && data.pendencias.length > 0) updateSheet(ss, "Pendencia", data.pendenciasHeader, data.pendencias);
+    if (data.salesHeader) updateSheet(ss, "Venda", data.salesHeader, data.sales || []);
+    if (data.employeesHeader) updateSheet(ss, "Funcionarios", data.employeesHeader, data.employees || []);
+    if (data.operationsHeader) updateSheet(ss, "Operacoes", data.operationsHeader, data.operations || []);
+    if (data.matchesHeader) updateSheet(ss, "Jogos", data.matchesHeader, data.matches || []);
+    if (data.assignmentsHeader) updateSheet(ss, "Escala", data.assignmentsHeader, data.assignments || []);
+    if (data.pendenciasHeader) updateSheet(ss, "Pendencia", data.pendenciasHeader, data.pendencias || []);
 
     return ContentService.createTextOutput(JSON.stringify({ status: "success" })).setMimeType(ContentService.MimeType.JSON);
   } catch(err) {
@@ -105,8 +105,19 @@ function doPost(e) {
 }
 
 function updateSheet(ss, sheetName, headers, rows) {
-  var altName = sheetName === "Pendencia" ? "Pendencias" : (sheetName === "Pendencias" ? "Pendencia" : sheetName);
-  var sheet = ss.getSheetByName(sheetName) || ss.getSheetByName(altName) || ss.insertSheet(sheetName);
+  var sheet = null;
+  if (sheetName === "Pendencia" || sheetName === "Pendencias") {
+    var pNames = ["Pendencia", "Pendencias", "Pendência", "Pendências"];
+    for (var p = 0; p < pNames.length; p++) {
+      sheet = ss.getSheetByName(pNames[p]);
+      if (sheet) break;
+    }
+  } else {
+    sheet = ss.getSheetByName(sheetName);
+  }
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+  }
   sheet.clear();
   sheet.appendRow(headers);
   if (rows && rows.length > 0) {

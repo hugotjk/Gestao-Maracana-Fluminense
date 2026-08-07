@@ -194,8 +194,8 @@ export async function pushAllToGoogleSheets(
         ]);
       }
 
-      // Aba Pendencia / Pendencias (if pendingTasks exist)
-      if (data.pendingTasks && data.pendingTasks.length > 0) {
+      // Aba Pendencia / Pendencias
+      if (data.pendingTasks !== undefined) {
         const rows = [
           ['id', 'jogoId', 'titulo', 'concluida', 'observacao', 'dataCriacao'],
           ...data.pendingTasks.map((t) => [t.id, t.matchId, t.titulo, t.concluida ? 'Sim' : 'Não', t.observacao || '', t.dataCriacao || '']),
@@ -203,7 +203,15 @@ export async function pushAllToGoogleSheets(
         try {
           await updateTab('Pendencia!A1:F', rows);
         } catch {
-          await updateTab('Pendencias!A1:F', rows);
+          try {
+            await updateTab('Pendencias!A1:F', rows);
+          } catch {
+            try {
+              await updateTab('Pendência!A1:F', rows);
+            } catch {
+              await updateTab('Pendências!A1:F', rows);
+            }
+          }
         }
       }
 
@@ -266,6 +274,17 @@ export async function pullFromGoogleSheets(
         const res = await fetch(gvizUrl);
         if (res.ok) {
           const text = await res.text();
+          const cleanText = text.trim();
+          if (
+            cleanText.startsWith('<!') ||
+            cleanText.startsWith('<html') ||
+            cleanText.startsWith('<HTML') ||
+            cleanText.includes('google.visualization.Query.setResponse') ||
+            cleanText.includes('"status":"error"') ||
+            cleanText.includes("'status':'error'")
+          ) {
+            throw new Error(`Aba "${tabName}" não encontrada ou erro no GViz.`);
+          }
           const rows = parseCSV(text);
           if (rows && rows.length > 0) {
             return rows;
@@ -284,37 +303,31 @@ export async function pullFromGoogleSheets(
 
       const res = await fetch(restUrl, { headers });
       if (!res.ok) {
-        throw new Error(`Não foi possível acessar a aba "${tabName}". Certifique-se de que a planilha está pública ("Qualquer pessoa com o link pode ver").`);
+        throw new Error(`Não foi possível acessar a aba "${tabName}". Certifique-se de que a planilha está pública ("Qualquer pessoa com elink pode ver").`);
       }
       const json = await res.json();
       return json.values || [];
     };
 
-    const fetchSheetRowsWithFallback = async (primaryTab: string, secondaryTab?: string): Promise<string[][]> => {
-      try {
-        const rows = await fetchSheetRows(primaryTab);
-        if (rows && rows.length > 0) return rows;
-      } catch (err) {
-        console.warn(`Tentativa de leitura para "${primaryTab}" falhou, tentando fallback...`, err);
-      }
-      if (secondaryTab) {
+    const fetchSheetRowsWithFallback = async (...tabNames: string[]): Promise<string[][]> => {
+      for (const tab of tabNames) {
         try {
-          const rows = await fetchSheetRows(secondaryTab);
+          const rows = await fetchSheetRows(tab);
           if (rows && rows.length > 0) return rows;
         } catch (err) {
-          console.warn(`Tentativa de leitura para "${secondaryTab}" falhou.`, err);
+          console.warn(`Tentativa de leitura para "${tab}" falhou, tentando próxima opção...`);
         }
       }
       return [];
     };
 
     const [vendaRows, funcRows, opsRows, jogosRows, escalaRows, pendenciasRows] = await Promise.all([
-      fetchSheetRowsWithFallback('Venda'),
-      fetchSheetRowsWithFallback('Funcionarios'),
-      fetchSheetRowsWithFallback('Operacoes'),
-      fetchSheetRowsWithFallback('Jogos'),
-      fetchSheetRowsWithFallback('Escala'),
-      fetchSheetRowsWithFallback('Pendencia', 'Pendencias'),
+      fetchSheetRowsWithFallback('Venda', 'Vendas'),
+      fetchSheetRowsWithFallback('Funcionarios', 'Funcionários', 'Funcionario', 'Funcionário'),
+      fetchSheetRowsWithFallback('Operacoes', 'Operações', 'Operacao', 'Operação'),
+      fetchSheetRowsWithFallback('Jogos', 'Jogo'),
+      fetchSheetRowsWithFallback('Escala', 'Escalas'),
+      fetchSheetRowsWithFallback('Pendencia', 'Pendencias', 'Pendência', 'Pendências'),
     ]);
 
     // Parse Vendas

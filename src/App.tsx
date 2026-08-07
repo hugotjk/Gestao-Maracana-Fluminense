@@ -73,29 +73,29 @@ export default function App() {
       pullFromGoogleSheets(sheetId)
         .then((res) => {
           if (res.success && res.data) {
-            if (res.data.assignments) {
+            if (res.data.assignments && res.data.assignments.length > 0) {
               setAssignmentsState(res.data.assignments);
               saveAssignments(res.data.assignments);
             }
-            if (res.data.employees) {
+            if (res.data.employees && res.data.employees.length > 0) {
               const sorted = sortEmployees(res.data.employees);
               setEmployeesState(sorted);
               saveEmployees(sorted);
             }
-            if (res.data.matches) {
+            if (res.data.matches && res.data.matches.length > 0) {
               const sorted = sortMatchesByDate(res.data.matches);
               setMatchesState(sorted);
               saveMatches(sorted);
             }
-            if (res.data.operations) {
+            if (res.data.operations && res.data.operations.length > 0) {
               setOperationsState(res.data.operations);
               saveOperations(res.data.operations);
             }
-            if (res.data.sales) {
+            if (res.data.sales && res.data.sales.length > 0) {
               setSalesState(res.data.sales);
               saveSales(res.data.sales);
             }
-            if (res.data.pendingTasks) {
+            if (res.data.pendingTasks && res.data.pendingTasks.length > 0) {
               const sorted = sortPendingTasks(res.data.pendingTasks);
               setPendingTasksState(sorted);
               savePendingTasks(sorted);
@@ -164,21 +164,21 @@ export default function App() {
     const next = sortMatchesByDate([...matches, m]);
     setMatchesState(next);
     saveMatches(next);
-    triggerAutoSync(sales, employees, operations, next, assignments);
+    triggerAutoSync(sales, employees, operations, next, assignments, pendingTasks);
   };
 
   const handleUpdateMatch = (m: Match) => {
     const next = sortMatchesByDate(matches.map((item) => (item.id === m.id ? m : item)));
     setMatchesState(next);
     saveMatches(next);
-    triggerAutoSync(sales, employees, operations, next, assignments);
+    triggerAutoSync(sales, employees, operations, next, assignments, pendingTasks);
   };
 
   const handleDeleteMatch = (id: string) => {
     const next = sortMatchesByDate(matches.filter((item) => item.id !== id));
     setMatchesState(next);
     saveMatches(next);
-    triggerAutoSync(sales, employees, operations, next, assignments);
+    triggerAutoSync(sales, employees, operations, next, assignments, pendingTasks);
   };
 
   // Operations operations
@@ -186,21 +186,21 @@ export default function App() {
     const next = [...operations, op];
     setOperationsState(next);
     saveOperations(next);
-    triggerAutoSync(sales, employees, next, matches, assignments);
+    triggerAutoSync(sales, employees, next, matches, assignments, pendingTasks);
   };
 
   const handleUpdateOperation = (op: Operation) => {
     const next = operations.map((item) => (item.codigo === op.codigo ? op : item));
     setOperationsState(next);
     saveOperations(next);
-    triggerAutoSync(sales, employees, next, matches, assignments);
+    triggerAutoSync(sales, employees, next, matches, assignments, pendingTasks);
   };
 
   const handleDeleteOperation = (codigo: string) => {
     const next = operations.filter((item) => item.codigo !== codigo);
     setOperationsState(next);
     saveOperations(next);
-    triggerAutoSync(sales, employees, next, matches, assignments);
+    triggerAutoSync(sales, employees, next, matches, assignments, pendingTasks);
   };
 
   // Employee operations
@@ -208,21 +208,21 @@ export default function App() {
     const next = sortEmployees([...employees, emp]);
     setEmployeesState(next);
     saveEmployees(next);
-    triggerAutoSync(sales, next, operations, matches, assignments);
+    triggerAutoSync(sales, next, operations, matches, assignments, pendingTasks);
   };
 
   const handleUpdateEmployee = (emp: Employee) => {
     const next = sortEmployees(employees.map((item) => (item.cpf === emp.cpf ? emp : item)));
     setEmployeesState(next);
     saveEmployees(next);
-    triggerAutoSync(sales, next, operations, matches, assignments);
+    triggerAutoSync(sales, next, operations, matches, assignments, pendingTasks);
   };
 
   const handleDeleteEmployee = (cpf: string) => {
     const next = sortEmployees(employees.filter((item) => item.cpf !== cpf));
     setEmployeesState(next);
     saveEmployees(next);
-    triggerAutoSync(sales, next, operations, matches, assignments);
+    triggerAutoSync(sales, next, operations, matches, assignments, pendingTasks);
   };
 
   // Assignments operations
@@ -230,35 +230,35 @@ export default function App() {
     const next = [...assignments, asg];
     setAssignmentsState(next);
     saveAssignments(next);
-    triggerAutoSync(sales, employees, operations, matches, next);
+    triggerAutoSync(sales, employees, operations, matches, next, pendingTasks);
   };
 
   const handleUpdateAssignment = (asg: Assignment) => {
     const next = assignments.map((item) => (item.id === asg.id ? asg : item));
     setAssignmentsState(next);
     saveAssignments(next);
-    triggerAutoSync(sales, employees, operations, matches, next);
+    triggerAutoSync(sales, employees, operations, matches, next, pendingTasks);
   };
 
   const handleRemoveAssignment = (id: string) => {
     const next = assignments.filter((item) => item.id !== id);
     setAssignmentsState(next);
     saveAssignments(next);
-    triggerAutoSync(sales, employees, operations, matches, next);
+    triggerAutoSync(sales, employees, operations, matches, next, pendingTasks);
   };
 
   // Sales operations
   const handleSaveSales = (updatedSales: Sale[]) => {
     setSalesState(updatedSales);
     saveSales(updatedSales);
-    triggerAutoSync(updatedSales, employees, operations, matches);
+    triggerAutoSync(updatedSales, employees, operations, matches, assignments, pendingTasks);
   };
 
   const handleDeleteSale = (codigo: string) => {
     const next = sales.filter((item) => item.codigo !== codigo);
     setSalesState(next);
     saveSales(next);
-    triggerAutoSync(next, employees, operations, matches);
+    triggerAutoSync(next, employees, operations, matches, assignments, pendingTasks);
   };
 
   // Pending tasks operations
