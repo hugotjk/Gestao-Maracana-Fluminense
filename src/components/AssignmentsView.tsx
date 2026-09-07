@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Users, PlusCircle, Trash2, Search, CheckCircle2, FileSpreadsheet } from 'lucide-react';
+import { Users, PlusCircle, Trash2, Search, CheckCircle2, FileSpreadsheet, ChevronDown } from 'lucide-react';
 import { Match, Operation, Employee, Assignment } from '../types';
 import { generateEmployeeAssignmentsXLSX } from '../lib/excel';
 
@@ -32,24 +32,64 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [message, setMessage] = useState<string | null>(null);
 
-  const sortedEmployeesForSelect = React.useMemo(() => {
-    return [...employees].sort((a, b) => {
-      const favA = a.favorito ? 1 : 0;
-      const favB = b.favorito ? 1 : 0;
-      if (favA !== favB) return favB - favA;
-      return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' });
+  // Operations sorted by their code (the code in parentheses)
+  const sortedOperations = React.useMemo(() => {
+    return [...operations].sort((a, b) =>
+      (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' })
+    );
+  }, [operations]);
+
+  // Filter assignments for selected match, sorted by operation code, then employee name
+  const matchAssignments = React.useMemo(() => {
+    const list = assignments.filter((a) => a.matchId === selectedMatch?.id);
+    const empMap = new Map<string, string>(employees.map((e) => [e.cpf, e.nome]));
+
+    return [...list].sort((a, b) => {
+      const codeA = a.operacaoCodigo || '';
+      const codeB = b.operacaoCodigo || '';
+      const cmp = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+      if (cmp !== 0) return cmp;
+
+      const nameA = empMap.get(a.cpf) || '';
+      const nameB = empMap.get(b.cpf) || '';
+      return nameA.localeCompare(nameB, 'pt-BR', { sensitivity: 'base' });
     });
-  }, [employees]);
+  }, [assignments, selectedMatch?.id, employees]);
+
+  // Set of CPFs already assigned to this match
+  const assignedCpfs = React.useMemo(() => {
+    return new Set(matchAssignments.map((a) => a.cpf));
+  }, [matchAssignments]);
+
+  // Only employees NOT yet scheduled for this match
+  const availableEmployees = React.useMemo(() => {
+    return employees
+      .filter((e) => !assignedCpfs.has(e.cpf))
+      .sort((a, b) => {
+        const favA = a.favorito ? 1 : 0;
+        const favB = b.favorito ? 1 : 0;
+        if (favA !== favB) return favB - favA;
+        return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' });
+      });
+  }, [employees, assignedCpfs]);
 
   // Set default operation on load
   React.useEffect(() => {
-    if (operations.length > 0 && !selectedOpCodigo) {
-      setSelectedOpCodigo(operations[0].codigo);
+    if (sortedOperations.length > 0 && !selectedOpCodigo) {
+      setSelectedOpCodigo(sortedOperations[0].codigo);
     }
-    if (sortedEmployeesForSelect.length > 0 && !selectedCpf) {
-      setSelectedCpf(sortedEmployeesForSelect[0].cpf);
+  }, [sortedOperations, selectedOpCodigo]);
+
+  // Keep selectedCpf synchronized with available employees
+  React.useEffect(() => {
+    if (availableEmployees.length > 0) {
+      if (!selectedCpf || !availableEmployees.some((e) => e.cpf === selectedCpf)) {
+        setSelectedCpf(availableEmployees[0].cpf);
+      }
+    } else {
+      setSelectedCpf('');
     }
-  }, [operations, sortedEmployeesForSelect]);
+  }, [availableEmployees, selectedCpf]);
 
   const handleEmployeeSelect = (cpf: string) => {
     setSelectedCpf(cpf);
@@ -59,13 +99,9 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
     e.preventDefault();
     if (!selectedMatch || !selectedCpf || !selectedOpCodigo) return;
 
-    // Check if employee is already assigned to this operation on this match
-    const existing = assignments.find(
-      (a) => a.matchId === selectedMatch.id && a.cpf === selectedCpf && a.operacaoCodigo === selectedOpCodigo
-    );
-
-    if (existing) {
-      setMessage('O funcionário já está escalado nesta operação para este jogo.');
+    // Check if employee is already assigned to this match
+    if (assignedCpfs.has(selectedCpf)) {
+      setMessage('O funcionário já está escalado para este jogo.');
       setTimeout(() => setMessage(null), 3000);
       return;
     }
@@ -79,12 +115,18 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
     };
 
     onAddAssignment(newAssignment);
-    setMessage('Funcionário adicionado à escala!');
+    setMessage('Funcionário adicionado à escala com sucesso!');
     setTimeout(() => setMessage(null), 3000);
   };
 
-  // Filter assignments for selected match
-  const matchAssignments = assignments.filter((a) => a.matchId === selectedMatch?.id);
+  const handleOperationChange = (asg: Assignment, newOpCodigo: string) => {
+    if (onUpdateAssignment && newOpCodigo && newOpCodigo !== asg.operacaoCodigo) {
+      onUpdateAssignment({ ...asg, operacaoCodigo: newOpCodigo });
+      const opObj = operations.find((o) => o.codigo === newOpCodigo);
+      setMessage(`Operação alterada para "${opObj?.operacao || newOpCodigo}"`);
+      setTimeout(() => setMessage(null), 3000);
+    }
+  };
 
   // Filter by search
   const filteredAssignments = matchAssignments.filter((asg) => {
@@ -143,20 +185,33 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Select Employee */}
           <div>
-            <label className="block text-xs font-bold text-slate-600 mb-1">
-              Funcionário Cadastrado:
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-slate-600">
+                Funcionário Cadastrado:
+              </label>
+              <span className="text-[11px] font-semibold text-slate-500">
+                {availableEmployees.length} disponível(is) de {employees.length}
+              </span>
+            </div>
             <select
               value={selectedCpf}
               onChange={(e) => handleEmployeeSelect(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-[#8A0029] focus:outline-none"
+              disabled={availableEmployees.length === 0}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-[#8A0029] focus:outline-none disabled:bg-slate-100 disabled:text-slate-400"
             >
-              {employees.length === 0 && <option value="">Nenhum funcionário cadastrado</option>}
-              {sortedEmployeesForSelect.map((e) => (
-                <option key={e.cpf} value={e.cpf}>
-                  {e.favorito ? '★ ' : ''}{e.nome} - CPF: {e.cpf} ({e.empresa})
+              {availableEmployees.length === 0 ? (
+                <option value="">
+                  {employees.length === 0
+                    ? 'Nenhum funcionário cadastrado'
+                    : 'Todos os funcionários já foram escalados para este jogo'}
                 </option>
-              ))}
+              ) : (
+                availableEmployees.map((e) => (
+                  <option key={e.cpf} value={e.cpf}>
+                    {e.favorito ? '★ ' : ''}{e.nome} - CPF: {e.cpf} ({e.empresa})
+                  </option>
+                ))
+              )}
             </select>
           </div>
 
@@ -170,8 +225,8 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
               onChange={(e) => setSelectedOpCodigo(e.target.value)}
               className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-[#8A0029] focus:outline-none"
             >
-              {operations.length === 0 && <option value="">Nenhuma operação cadastrada</option>}
-              {operations.map((o) => (
+              {sortedOperations.length === 0 && <option value="">Nenhuma operação cadastrada</option>}
+              {sortedOperations.map((o) => (
                 <option key={o.codigo} value={o.codigo}>
                   {o.operacao} ({o.codigo})
                 </option>
@@ -183,16 +238,16 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
         <div className="flex flex-wrap items-center gap-3 pt-2">
           <button
             type="submit"
-            disabled={employees.length === 0 || operations.length === 0}
-            className="flex items-center justify-center gap-2 bg-[#8A0029] hover:bg-[#6A001F] text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm shrink-0"
+            disabled={availableEmployees.length === 0 || operations.length === 0}
+            className="flex items-center justify-center gap-2 bg-[#8A0029] hover:bg-[#6A001F] text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm shrink-0 disabled:bg-slate-300 disabled:cursor-not-allowed"
           >
             <PlusCircle className="w-4 h-4" />
             Escalar Funcionário
           </button>
 
           {message && (
-            <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-300 text-amber-900 rounded-xl text-xs font-semibold px-4 py-2.5 shadow-sm transition-all">
-              <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
+            <div className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl text-xs font-semibold px-4 py-2.5 shadow-sm transition-all">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>{message}</span>
             </div>
           )}
@@ -262,6 +317,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                 filteredAssignments.map((asg) => {
                   const emp = employees.find((e) => e.cpf === asg.cpf);
                   const op = operations.find((o) => o.codigo === asg.operacaoCodigo);
+                  const currentOpExists = operations.some((o) => o.codigo === asg.operacaoCodigo);
 
                   return (
                     <tr key={asg.id} className="hover:bg-slate-50 transition-colors">
@@ -283,8 +339,29 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                       <td className="py-3 px-4 text-slate-800 font-bold">
                         {emp?.empresa || 'FMS'}
                       </td>
-                      <td className="py-3 px-4 font-semibold text-[#8A0029]">
-                        {op?.operacao || 'N/A'}
+                      <td className="py-2.5 px-4">
+                        <div className="relative inline-block w-full min-w-[170px] max-w-[240px]">
+                          <select
+                            value={asg.operacaoCodigo}
+                            onChange={(e) => handleOperationChange(asg, e.target.value)}
+                            className="w-full appearance-none bg-rose-50 hover:bg-rose-100/90 text-[#8A0029] font-bold border border-rose-200 hover:border-rose-300 rounded-lg pl-2.5 pr-7 py-1.5 text-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#8A0029] transition-all"
+                            title="Clique para mudar a operação deste funcionário"
+                          >
+                            {!currentOpExists && (
+                              <option value={asg.operacaoCodigo} className="text-slate-900 font-medium bg-white">
+                                {asg.operacaoCodigo} (Não cadastrada)
+                              </option>
+                            )}
+                            {sortedOperations.map((o) => (
+                              <option key={o.codigo} value={o.codigo} className="text-slate-900 font-medium bg-white">
+                                {o.operacao} ({o.codigo})
+                              </option>
+                            ))}
+                          </select>
+                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2 text-[#8A0029]">
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </div>
+                        </div>
                       </td>
                       <td className="py-2.5 px-4">
                         <input

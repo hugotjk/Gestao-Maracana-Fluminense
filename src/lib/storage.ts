@@ -93,6 +93,34 @@ export function saveEmployees(employees: Employee[]) {
   localStorage.setItem(STORAGE_KEYS.EMPLOYEES, JSON.stringify(sorted));
 }
 
+export function sortOperationsByCode(operations: Operation[]): Operation[] {
+  return [...operations].sort((a, b) =>
+    (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' })
+  );
+}
+
+export function sortAssignmentsByOperation(
+  assignments: Assignment[],
+  operations?: Operation[],
+  employees?: Employee[]
+): Assignment[] {
+  const empMap = employees ? new Map<string, string>(employees.map((e) => [e.cpf, e.nome])) : null;
+
+  return [...assignments].sort((a, b) => {
+    const codeA = a.operacaoCodigo || '';
+    const codeB = b.operacaoCodigo || '';
+    const cmp = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+    if (cmp !== 0) return cmp;
+
+    if (empMap) {
+      const nameA = empMap.get(a.cpf) || '';
+      const nameB = empMap.get(b.cpf) || '';
+      return nameA.localeCompare(nameB, 'pt-BR', { sensitivity: 'base' });
+    }
+    return 0;
+  });
+}
+
 export function getStoredAssignments(): Assignment[] {
   const data = localStorage.getItem(STORAGE_KEYS.ASSIGNMENTS);
   if (!data) {

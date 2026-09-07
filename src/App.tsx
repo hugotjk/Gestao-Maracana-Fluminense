@@ -20,6 +20,7 @@ import {
   getScriptUrl,
   sortMatchesByDate,
   sortEmployees,
+  sortAssignmentsByOperation,
 } from './lib/storage';
 import { initAuth, getAccessToken } from './lib/auth';
 import { pushAllToGoogleSheets, pullFromGoogleSheets } from './lib/googleSheets';
@@ -53,7 +54,7 @@ export default function App() {
     const loadedMatches = getStoredMatches();
     const loadedOperations = getStoredOperations();
     const loadedEmployees = getStoredEmployees();
-    const loadedAssignments = getStoredAssignments();
+    const loadedAssignments = sortAssignmentsByOperation(getStoredAssignments(), loadedOperations, loadedEmployees);
     const loadedSales = getStoredSales();
     const loadedPendingTasks = getStoredPendingTasks();
     const loadedActiveId = getActiveMatchId();
@@ -74,8 +75,9 @@ export default function App() {
         .then((res) => {
           if (res.success && res.data) {
             if (res.data.assignments && res.data.assignments.length > 0) {
-              setAssignmentsState(res.data.assignments);
-              saveAssignments(res.data.assignments);
+              const sorted = sortAssignmentsByOperation(res.data.assignments, res.data.operations, res.data.employees);
+              setAssignmentsState(sorted);
+              saveAssignments(sorted);
             }
             if (res.data.employees && res.data.employees.length > 0) {
               const sorted = sortEmployees(res.data.employees);
@@ -227,14 +229,15 @@ export default function App() {
 
   // Assignments operations
   const handleAddAssignment = (asg: Assignment) => {
-    const next = [...assignments, asg];
+    const next = sortAssignmentsByOperation([...assignments, asg], operations, employees);
     setAssignmentsState(next);
     saveAssignments(next);
     triggerAutoSync(sales, employees, operations, matches, next, pendingTasks);
   };
 
   const handleUpdateAssignment = (asg: Assignment) => {
-    const next = assignments.map((item) => (item.id === asg.id ? asg : item));
+    const updated = assignments.map((item) => (item.id === asg.id ? asg : item));
+    const next = sortAssignmentsByOperation(updated, operations, employees);
     setAssignmentsState(next);
     saveAssignments(next);
     triggerAutoSync(sales, employees, operations, matches, next, pendingTasks);
