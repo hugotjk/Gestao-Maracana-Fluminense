@@ -42,7 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header id="main-app-header" className="bg-[#7A0022] text-white shadow-lg border-b-4 border-[#006633]">
       {/* Top Banner */}
-      <div id="top-branding-bar" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-3 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div id="top-branding-bar" className="w-full px-4 sm:px-6 lg:px-8 pt-4 pb-3 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div id="branding-logo-title" className="flex items-center space-x-3">
           <div id="badge-flu-crest" className="w-12 h-12 rounded-full bg-gradient-to-br from-[#006633] via-[#7A0022] to-amber-500 p-0.5 flex items-center justify-center shadow-md">
             <div id="inner-crest" className="w-full h-full rounded-full bg-[#7A0022] flex items-center justify-center text-amber-300 font-extrabold text-xl tracking-tighter border border-amber-400/40">
@@ -87,7 +87,7 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Navigation Tabs Bar */}
       <div id="navigation-tabs-bar" className="bg-[#5c0019] border-t border-rose-900/40">
-        <div id="tabs-scroll-wrapper" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center overflow-x-auto space-x-1 py-1.5 no-scrollbar">
+        <div id="tabs-scroll-wrapper" className="w-full px-4 sm:px-6 lg:px-8 flex items-center overflow-x-auto space-x-1 py-1.5 no-scrollbar">
           <button
             id="nav-tab-dashboard"
             onClick={() => onSelectTab('dashboard')}

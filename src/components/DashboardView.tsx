@@ -258,7 +258,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   };
 
   return (
-    <div id="dashboard-view-root" className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
+    <div id="dashboard-view-root" className="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Top Banner */}
       <div
         id="dashboard-header-bar"

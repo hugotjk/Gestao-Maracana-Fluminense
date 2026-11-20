@@ -34,18 +34,22 @@ import { OperationsView } from './components/OperationsView';
 import { MatchesView } from './components/MatchesView';
 import { PendingTasksView } from './components/PendingTasksView';
 import { SettingsView } from './components/SettingsView';
+import { PendingProgressBanner } from './components/PendingProgressBanner';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<ViewTab>('dashboard');
 
   // Dados do app
-  const [matches, setMatchesState] = useState<Match[]>([]);
-  const [operations, setOperationsState] = useState<Operation[]>([]);
-  const [employees, setEmployeesState] = useState<Employee[]>([]);
-  const [assignments, setAssignmentsState] = useState<Assignment[]>([]);
-  const [sales, setSalesState] = useState<Sale[]>([]);
-  const [pendingTasks, setPendingTasksState] = useState<PendingTask[]>([]);
-  const [activeMatchId, setActiveMatchIdState] = useState<string>('');
+  // Já começa com o que está salvo no aparelho (evita telas vazias no primeiro instante)
+  const [matches, setMatchesState] = useState<Match[]>(() => getStoredMatches());
+  const [operations, setOperationsState] = useState<Operation[]>(() => getStoredOperations());
+  const [employees, setEmployeesState] = useState<Employee[]>(() => getStoredEmployees());
+  const [assignments, setAssignmentsState] = useState<Assignment[]>(() =>
+    sortAssignmentsByOperation(getStoredAssignments(), getStoredOperations(), getStoredEmployees())
+  );
+  const [sales, setSalesState] = useState<Sale[]>(() => getStoredSales());
+  const [pendingTasks, setPendingTasksState] = useState<PendingTask[]>(() => getStoredPendingTasks());
+  const [activeMatchId, setActiveMatchIdState] = useState<string>(() => getActiveMatchId());
   const [isLoadingSheet, setIsLoadingSheet] = useState<boolean>(false);
 
   const loadFromDevice = useCallback(() => {
@@ -98,11 +102,10 @@ export default function App() {
     [applySheetData]
   );
 
-  // Ao abrir: carrega do aparelho e depois atualiza com a planilha
+  // Ao abrir: atualiza com a planilha
   useEffect(() => {
-    loadFromDevice();
     void reloadFromSheet();
-  }, [loadFromDevice, reloadFromSheet]);
+  }, [reloadFromSheet]);
 
   // Jogo ativo
   const handleSelectActiveMatch = (id: string) => {
@@ -185,6 +188,12 @@ export default function App() {
         activeMatchId={activeMatchId}
         onSelectActiveMatch={handleSelectActiveMatch}
         isLoadingSheet={isLoadingSheet}
+      />
+
+      <PendingProgressBanner
+        pendingTasks={pendingTasks}
+        activeMatchId={activeMatchId}
+        onClick={currentTab === 'pendencias' ? undefined : () => setCurrentTab('pendencias')}
       />
 
       <main id="app-main-content" className="flex-1 pb-12">
@@ -277,7 +286,7 @@ export default function App() {
       </main>
 
       <footer id="app-footer" className="bg-slate-900 text-slate-400 text-xs py-6 border-t border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 text-center space-y-1">
+        <div className="w-full px-4 text-center space-y-1">
           <p className="font-semibold text-slate-300">
             Fluminense Football Club - Sistema de Gestão Operacional de Estádio
           </p>

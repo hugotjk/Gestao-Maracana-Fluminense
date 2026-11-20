@@ -93,7 +93,7 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
     .sort((a, b) => (b.data || '').localeCompare(a.data || ''));
 
   return (
-    <div id="matches-view-root" className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
+    <div id="matches-view-root" className="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Title Card */}
       <div id="matches-title-card" className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

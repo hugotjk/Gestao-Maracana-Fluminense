@@ -67,8 +67,6 @@ export const PendingTasksView: React.FC<PendingTasksViewProps> = ({
   }, [matchTasks]);
 
   const totalCount = matchTasks.length;
-  const completedCount = completedTasks.length;
-  const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const showFeedback = (msg: string) => {
     setFeedbackMsg(msg);
@@ -125,7 +123,7 @@ export const PendingTasksView: React.FC<PendingTasksViewProps> = ({
   };
 
   return (
-    <div id="pending-tasks-view-container" className="space-y-6 pb-12">
+    <div id="pending-tasks-view-container" className="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Page Header */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -140,26 +138,6 @@ export const PendingTasksView: React.FC<PendingTasksViewProps> = ({
         </div>
       </div>
 
-      {/* Progress Stats Card */}
-      {currentMatch && totalCount > 0 && (
-        <div className="bg-gradient-to-r from-slate-900 to-[#5A0019] text-white p-5 rounded-2xl shadow-sm space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-200">Progresso das Pendências</span>
-            <div className="text-xs font-semibold text-slate-200">
-              <span className="text-amber-300 font-bold text-sm">{completedCount}</span> de{' '}
-              <span className="font-bold text-sm">{totalCount}</span> concluídas ({progressPercent}%)
-            </div>
-          </div>
-
-          {/* Progress Bar */}
-          <div className="w-full bg-slate-800/80 h-2.5 rounded-full overflow-hidden border border-slate-700/60">
-            <div
-              className="bg-gradient-to-r from-amber-400 to-emerald-400 h-full transition-all duration-500 rounded-full"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-        </div>
-      )}
 
       {/* Form to Add New Task */}
       <form onSubmit={handleCreateTask} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">

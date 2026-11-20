@@ -143,7 +143,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   };
 
   return (
-    <div id="assignments-view-root" className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
+    <div id="assignments-view-root" className="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Header Banner */}
       <div id="assignments-title-card" className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
         <div>

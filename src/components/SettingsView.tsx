@@ -92,7 +92,7 @@ export const SettingsView: React.FC<SettingsViewProps> = (props) => {
       : 'bg-amber-50 border-amber-300 text-amber-900';
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <div className="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Status */}
       <div className={`p-5 rounded-2xl border flex items-start gap-3 ${statusStyle}`}>
         {sync.state === 'saved' ? (
