@@ -528,7 +528,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             {/* Ranking Table */}
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse m-hide-2 m-hide-6">
                 <thead>
                   <tr className="border-b border-slate-200 text-2xs font-extrabold text-slate-500 uppercase tracking-wider bg-slate-100/80">
                     <th className="py-3 px-4">Posição</th>
@@ -615,7 +615,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             {/* Ranking Table for Month */}
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse m-hide-2 m-hide-6">
                 <thead>
                   <tr className="border-b border-slate-200 text-2xs font-extrabold text-slate-500 uppercase tracking-wider bg-slate-100/80">
                     <th className="py-3 px-4">Posição</th>
@@ -749,7 +749,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                 {/* Ranking Table for Specific Game */}
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
+                  <table className="w-full text-left border-collapse m-hide-1 m-hide-2 m-hide-5 m-hide-8">
                     <thead>
                       <tr className="border-b border-slate-200 text-2xs font-extrabold text-slate-500 uppercase tracking-wider bg-slate-100/80">
                         <th className="py-3 px-4">Posição</th>

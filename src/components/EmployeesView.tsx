@@ -268,7 +268,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
         </div>
 
         <div className="overflow-x-auto border border-slate-200 rounded-xl">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse m-hide-3 m-hide-4 m-hide-5 m-hide-6">
             <thead>
               <tr className="bg-slate-100/80 text-xs font-semibold text-slate-600 uppercase tracking-wider border-b border-slate-200">
                 <th className="py-3 px-4">CPF</th>

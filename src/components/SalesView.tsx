@@ -140,7 +140,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
 
       {/* Main Form for entering sales values */}
       <form id="sales-entry-form" onSubmit={handleSaveAll} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-5">
-        <div id="operation-sales-inputs-grid" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div id="operation-sales-inputs-grid" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
           {operations.map((op) => (
             <div
               key={op.codigo}
@@ -204,7 +204,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
         </div>
 
         <div className="overflow-x-auto border border-slate-200 rounded-xl">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse m-hide-1 m-hide-3 m-hide-4">
             <thead>
               <tr className="bg-slate-100/80 text-xs font-semibold text-slate-600 uppercase tracking-wider border-b border-slate-200">
                 <th className="py-3 px-4">Código</th>

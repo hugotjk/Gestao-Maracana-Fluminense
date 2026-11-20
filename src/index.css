@@ -1,1 +1,20 @@
 @import "tailwindcss";
+
+/* ---- Celular: tabelas mais enxutas ---- */
+@media (max-width: 639px) {
+  table.m-hide-1 tr > *:nth-child(1):not([colspan]) { display: none; }
+  table.m-hide-2 tr > *:nth-child(2):not([colspan]) { display: none; }
+  table.m-hide-3 tr > *:nth-child(3):not([colspan]) { display: none; }
+  table.m-hide-4 tr > *:nth-child(4):not([colspan]) { display: none; }
+  table.m-hide-5 tr > *:nth-child(5):not([colspan]) { display: none; }
+  table.m-hide-6 tr > *:nth-child(6):not([colspan]) { display: none; }
+  table.m-hide-7 tr > *:nth-child(7):not([colspan]) { display: none; }
+  table.m-hide-8 tr > *:nth-child(8):not([colspan]) { display: none; }
+  table.m-hide-9 tr > *:nth-child(9):not([colspan]) { display: none; }
+  table.m-hide-10 tr > *:nth-child(10):not([colspan]) { display: none; }
+  table th,
+  table td {
+    padding-left: 0.6rem !important;
+    padding-right: 0.6rem !important;
+  }
+}
