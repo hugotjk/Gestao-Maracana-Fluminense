@@ -136,18 +136,9 @@ function normalizeCpf(cpf: string): string {
   return digits ? digits.padStart(11, '0') : '';
 }
 
-/**
- * Envia todos os dados para a planilha via Apps Script e LÊ a resposta,
- * para só dizer "salvo" quando a planilha confirmar.
- */
-export async function pushAllToGoogleSheets(spreadsheetId: string, data: AppData): Promise<PushResult> {
-  const scriptUrl = getScriptUrl();
-  if (!scriptUrl || !scriptUrl.startsWith('http')) {
-    return { success: false, message: 'Link do Web App (Apps Script) não configurado.' };
-  }
-
-  const payload = {
-    sheetId: extractSpreadsheetId(spreadsheetId),
+/** Linhas de cada aba, exatamente como vão para a planilha. */
+export function buildSheetRows(data: AppData) {
+  return {
     salesHeader: ['codigo', 'data', 'mandante', 'visitante', 'operacao', 'venda'],
     sales: data.sales.map((s) => [s.codigo, s.data, s.mandante, s.visitante, s.operacao, s.venda]),
     employeesHeader: ['cpf', 'nome', 'email', 'celular', 'setor', 'empresa', 'funcao'],
@@ -158,9 +149,34 @@ export async function pushAllToGoogleSheets(spreadsheetId: string, data: AppData
     matches: data.matches.map((m) => [m.id, m.data, m.horario, m.mandante, m.visitante]),
     assignmentsHeader: ['id', 'jogoId', 'cpf', 'operacaoCodigo', 'funcao'],
     assignments: data.assignments.map((a) => [a.id, a.matchId, a.cpf, a.operacaoCodigo, a.funcao || '']),
-    pendenciasHeader: ['id', 'jogoId', 'titulo', 'concluida', 'observacao', 'dataCriacao'],
-    pendencias: data.pendingTasks.map((t) => [t.id, t.matchId, t.titulo, t.concluida ? 'Sim' : 'Não', t.observacao || '', t.dataCriacao || '']),
+    pendenciasHeader: ['id', 'jogoId', 'titulo', 'concluida', 'observacao', 'dataCriacao', 'todoJogo', 'jogosConcluidos', 'jogoConclusao', 'dataConclusao'],
+    pendencias: data.pendingTasks.map((t) => [
+      t.id,
+      t.matchId,
+      t.titulo,
+      t.concluida ? 'Sim' : 'Não',
+      t.observacao || '',
+      t.dataCriacao || '',
+      t.recorrente ? 'Sim' : 'Não',
+      (t.jogosConcluidos || []).join(';'),
+      t.jogoConclusao || '',
+      t.dataConclusao || '',
+    ]),
   };
+}
+
+/**
+ * Envia todos os dados para a planilha via Apps Script e LÊ a resposta,
+ * para só dizer "salvo" quando a planilha confirmar.
+ */
+export async function pushAllToGoogleSheets(spreadsheetId: string, data: AppData): Promise<PushResult> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl || !scriptUrl.startsWith('http')) {
+    return { success: false, message: 'Link do Web App (Apps Script) não configurado.' };
+  }
+
+  const payload = { sheetId: extractSpreadsheetId(spreadsheetId), ...buildSheetRows(data) };
+
 
   let json: any;
   try {
@@ -335,6 +351,10 @@ export async function pullFromGoogleSheets(
         concluida: ['sim', 'true', '1'].includes((row[3] || '').toLowerCase()),
         observacao: row[4] || '',
         dataCriacao: row[5] || '',
+        recorrente: ['sim', 'true', '1'].includes((row[6] || '').toLowerCase()),
+        jogosConcluidos: (row[7] || '').split(';').map((x) => x.trim()).filter(Boolean),
+        jogoConclusao: row[8] || '',
+        dataConclusao: row[9] || '',
       }));
 
     return {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { ListChecks, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { PendingTask } from '../types';
+import { tasksForMatch, isTaskDone } from '../lib/storage';
 
 interface Props {
   pendingTasks: PendingTask[];
@@ -9,17 +10,18 @@ interface Props {
   onClick?: () => void;
 }
 
-/** Barra de progresso das pendências do jogo ativo, mostrada logo abaixo do cabeçalho em todas as abas. */
+/** Barra de progresso das pendências (abertas + checklist do jogo ativo), mostrada logo abaixo do cabeçalho em todas as abas. */
 export const PendingProgressBanner: React.FC<Props> = ({ pendingTasks, activeMatchId, onClick }) => {
-  const tasks = pendingTasks.filter((t) => t.matchId === activeMatchId);
-  if (!activeMatchId || tasks.length === 0) return null;
+  const tasks = tasksForMatch(pendingTasks, activeMatchId);
+  if (tasks.length === 0) return null;
 
-  const done = tasks.filter((t) => t.concluida).length;
+  const isDone = (t: PendingTask) => isTaskDone(t, activeMatchId);
+  const done = tasks.filter(isDone).length;
   const open = tasks.length - done;
   const pct = Math.round((done / tasks.length) * 100);
   const allDone = open === 0;
   const nextTitles = tasks
-    .filter((t) => !t.concluida)
+    .filter((t) => !isDone(t))
     .map((t) => t.titulo)
     .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
     .slice(0, 3);
@@ -33,7 +35,7 @@ export const PendingProgressBanner: React.FC<Props> = ({ pendingTasks, activeMat
           ) : (
             <ListChecks className="w-4 h-4 text-amber-300" />
           )}
-          {allDone ? 'Todas as pendências do jogo concluídas' : `${open} ${open === 1 ? 'pendência aberta' : 'pendências abertas'} neste jogo`}
+          {allDone ? 'Nenhuma pendência aberta' : `${open} ${open === 1 ? 'pendência aberta' : 'pendências abertas'}`}
           {!allDone && nextTitles.length > 0 && (
             <span className="hidden md:inline text-xs font-medium text-slate-300 truncate max-w-[50vw]">
               — {nextTitles.join(' · ')}

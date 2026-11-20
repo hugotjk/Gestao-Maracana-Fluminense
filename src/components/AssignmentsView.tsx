@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Users, PlusCircle, Trash2, Search, CheckCircle2, FileSpreadsheet, ChevronDown } from 'lucide-react';
+import { Users, PlusCircle, Trash2, Search, CheckCircle2, FileSpreadsheet, ChevronDown, Copy } from 'lucide-react';
 import { Match, Operation, Employee, Assignment } from '../types';
 import { generateEmployeeAssignmentsXLSX } from '../lib/excel';
 
@@ -10,6 +10,7 @@ interface AssignmentsViewProps {
   matches: Match[];
   activeMatchId: string;
   onAddAssignment: (assignment: Assignment) => void;
+  onAddAssignments: (list: Assignment[]) => void;
   onUpdateAssignment?: (assignment: Assignment) => void;
   onRemoveAssignment: (id: string) => void;
 }
@@ -21,6 +22,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   matches,
   activeMatchId,
   onAddAssignment,
+  onAddAssignments,
   onUpdateAssignment,
   onRemoveAssignment,
 }) => {
@@ -138,6 +140,54 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
     );
   });
 
+  // ---- Copiar escala de outro jogo ----
+  const sourceGames = React.useMemo(() => {
+    const withAsg = new Set(assignments.map((a) => a.matchId));
+    return matches
+      .filter((m) => m.id !== selectedMatch?.id && withAsg.has(m.id))
+      .sort((a, b) => (b.data || '').localeCompare(a.data || ''));
+  }, [assignments, matches, selectedMatch?.id]);
+
+  // Padrão: o jogo com escala mais recente ANTES do jogo ativo (ou o mais recente de todos)
+  const defaultSourceId = React.useMemo(() => {
+    const before = sourceGames.find((m) => (m.data || '') <= (selectedMatch?.data || ''));
+    return (before || sourceGames[0])?.id || '';
+  }, [sourceGames, selectedMatch?.data]);
+
+  const [copySourceId, setCopySourceId] = useState('');
+  React.useEffect(() => setCopySourceId(defaultSourceId), [defaultSourceId]);
+
+  const handleCopyEscala = () => {
+    if (!selectedMatch || !copySourceId) return;
+    const source = matches.find((m) => m.id === copySourceId);
+    const validCpfs = new Set(employees.map((e) => e.cpf));
+    const toCopy = assignments.filter(
+      (a) => a.matchId === copySourceId && !assignedCpfs.has(a.cpf) && validCpfs.has(a.cpf)
+    );
+    if (toCopy.length === 0) {
+      setMessage('Todos os funcionários desse jogo já estão nesta escala.');
+      setTimeout(() => setMessage(null), 3500);
+      return;
+    }
+    const ok = window.confirm(
+      `Copiar ${toCopy.length} funcionário(s) da escala de ${source?.mandante} x ${source?.visitante} para ${selectedMatch.mandante} x ${selectedMatch.visitante}?` +
+        (assignedCpfs.size > 0 ? '\n\nQuem já está escalado neste jogo continua como está.' : '')
+    );
+    if (!ok) return;
+    const stamp = Date.now();
+    onAddAssignments(
+      toCopy.map((a, i) => ({
+        id: `ASG_${stamp}_${i}_${Math.random().toString(36).slice(2, 6)}`,
+        matchId: selectedMatch.id,
+        cpf: a.cpf,
+        operacaoCodigo: a.operacaoCodigo,
+        funcao: a.funcao || '',
+      }))
+    );
+    setMessage(`${toCopy.length} funcionário(s) copiado(s) para a escala deste jogo.`);
+    setTimeout(() => setMessage(null), 3500);
+  };
+
   const handleExportXLSX = () => {
     generateEmployeeAssignmentsXLSX(matchAssignments, employees, operations, selectedMatch);
   };
@@ -169,6 +219,32 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
             <FileSpreadsheet className="w-3.5 h-3.5" />
             <span>Gerar Planilha (XLSX)</span>
           </button>
+
+          {sourceGames.length > 0 && (
+            <div className="inline-flex flex-wrap items-center gap-2 sm:ml-3 mt-2 sm:mt-0 align-middle">
+              <span className="text-xs font-bold text-slate-600">Copiar escala de:</span>
+              <select
+                value={copySourceId}
+                onChange={(e) => setCopySourceId(e.target.value)}
+                className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-[#8A0029] focus:outline-none max-w-[280px]"
+              >
+                {sourceGames.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.mandante} x {m.visitante} ({m.data ? m.data.split('-').reverse().join('/') : ''}) ·{' '}
+                    {assignments.filter((a) => a.matchId === m.id).length} func.
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleCopyEscala}
+                className="inline-flex items-center gap-1.5 font-bold text-xs px-3.5 py-2 rounded-xl bg-[#8A0029] hover:bg-[#6A001F] text-white shadow-sm cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                Copiar para este jogo
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

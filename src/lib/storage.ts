@@ -211,6 +211,19 @@ function isGhostTask(t: PendingTask): boolean {
   return /^V\d{9}$/.test(t.id || '') && /^\d{4}-\d{2}-\d{2}$/.test(t.matchId || '');
 }
 
+/** A pendência está feita? Recorrente: feita no jogo informado. Normal: resolvida. */
+export function isTaskDone(t: PendingTask, activeMatchId: string): boolean {
+  return t.recorrente ? (t.jogosConcluidos || []).includes(activeMatchId) : t.concluida;
+}
+
+/**
+ * Pendências que contam para o jogo ativo: checklist de todo jogo, pendências abertas
+ * e as resolvidas durante este jogo.
+ */
+export function tasksForMatch(tasks: PendingTask[], activeMatchId: string): PendingTask[] {
+  return tasks.filter((t) => t.recorrente || !t.concluida || (activeMatchId && t.jogoConclusao === activeMatchId));
+}
+
 export function sortPendingTasks(tasks: PendingTask[]): PendingTask[] {
   tasks = tasks.filter((t) => !isGhostTask(t));
   const pending = tasks.filter((t) => !t.concluida).sort((a, b) => (a.titulo || '').localeCompare(b.titulo || '', 'pt-BR', { sensitivity: 'base' }));

@@ -18,11 +18,12 @@ import {
   setActiveMatchId,
   getSpreadsheetId,
   hasUnsyncedChanges,
+  getLastSync,
   sortMatchesByDate,
   sortEmployees,
   sortAssignmentsByOperation,
 } from './lib/storage';
-import { pullFromGoogleSheets, AppData } from './lib/googleSheets';
+import { pullFromGoogleSheets, AppData, buildSheetRows } from './lib/googleSheets';
 import { markChanged, flush as flushSync } from './lib/sync';
 
 import { Header } from './components/Header';
@@ -67,6 +68,29 @@ export default function App() {
   /** Grava no aparelho os dados vindos da planilha (só as abas que vieram com linhas). */
   const applySheetData = useCallback(
     (data: AppData) => {
+      // Só mexe na tela se a planilha tiver algo diferente do que já está aqui
+      // (evita apagar o que você está digitando quando nada mudou).
+      const local: AppData = {
+        sales: getStoredSales(),
+        employees: getStoredEmployees(),
+        operations: getStoredOperations(),
+        matches: getStoredMatches(),
+        assignments: getStoredAssignments(),
+        pendingTasks: getStoredPendingTasks(),
+      };
+      const merged: AppData = {
+        sales: data.sales.length > 0 ? data.sales : local.sales,
+        employees: data.employees.length > 0 ? sortEmployees(data.employees) : local.employees,
+        operations: data.operations.length > 0 ? data.operations : local.operations,
+        matches: data.matches.length > 0 ? sortMatchesByDate(data.matches) : local.matches,
+        assignments:
+          data.assignments.length > 0
+            ? sortAssignmentsByOperation(data.assignments, data.operations, data.employees)
+            : local.assignments,
+        pendingTasks: data.pendingTasks.length > 0 ? sortPendingTasks(data.pendingTasks) : local.pendingTasks,
+      };
+      if (JSON.stringify(buildSheetRows(merged)) === JSON.stringify(buildSheetRows(local))) return;
+
       if (data.employees.length > 0) saveEmployees(sortEmployees(data.employees));
       if (data.operations.length > 0) saveOperations(data.operations);
       if (data.matches.length > 0) saveMatches(sortMatchesByDate(data.matches));
@@ -82,21 +106,29 @@ export default function App() {
 
   /** Busca os dados da planilha. Se houver alterações não enviadas neste aparelho, elas têm prioridade. */
   const reloadFromSheet = useCallback(
-    async (force = false): Promise<{ success: boolean; message: string }> => {
+    async (force = false, silent = false): Promise<{ success: boolean; message: string }> => {
       if (!force && hasUnsyncedChanges()) {
         void flushSync();
         return { success: false, message: 'Há alterações deste aparelho ainda não enviadas; enviando primeiro.' };
       }
-      setIsLoadingSheet(true);
+      // Logo depois de um envio deste aparelho, a planilha já está igual ao que está aqui
+      // (e a leitura do Google pode vir alguns segundos atrasada): não precisa buscar.
+      const last = getLastSync();
+      if (!force && silent && last && Date.now() - new Date(last).getTime() < 45000) {
+        return { success: true, message: 'Dados recentes.' };
+      }
+      const startedAt = getLastSync();
+      if (!silent) setIsLoadingSheet(true);
       try {
         const res = await pullFromGoogleSheets(getSpreadsheetId());
-        // Se o usuário alterou algo enquanto carregava, não sobrescreve.
-        if (res.success && res.data && (force || !hasUnsyncedChanges())) {
+        // Se o usuário alterou algo (ou este aparelho enviou algo) enquanto carregava, não sobrescreve.
+        const changedMeanwhile = hasUnsyncedChanges() || getLastSync() !== startedAt;
+        if (res.success && res.data && (force || !changedMeanwhile)) {
           applySheetData(res.data);
         }
         return res;
       } finally {
-        setIsLoadingSheet(false);
+        if (!silent) setIsLoadingSheet(false);
       }
     },
     [applySheetData]
@@ -105,6 +137,22 @@ export default function App() {
   // Ao abrir: atualiza com a planilha
   useEffect(() => {
     void reloadFromSheet();
+  }, [reloadFromSheet]);
+
+  // Vários aparelhos (celular + iPad): ao voltar para o app e a cada 1 minuto com ele aberto,
+  // busca o que outro aparelho salvou. Se este aparelho tiver algo não enviado, envia primeiro.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine !== false) void reloadFromSheet(false, true);
+    };
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('online', refresh);
+    const timer = setInterval(refresh, 60000);
+    return () => {
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('online', refresh);
+      clearInterval(timer);
+    };
   }, [reloadFromSheet]);
 
   // Jogo ativo
@@ -155,6 +203,7 @@ export default function App() {
     markChanged();
   };
   const handleAddAssignment = (asg: Assignment) => updateAssignments([...assignments, asg]);
+  const handleAddAssignments = (list: Assignment[]) => updateAssignments([...assignments, ...list]);
   const handleUpdateAssignment = (asg: Assignment) =>
     updateAssignments(assignments.map((item) => (item.id === asg.id ? asg : item)));
   const handleRemoveAssignment = (id: string) => updateAssignments(assignments.filter((item) => item.id !== id));
@@ -225,6 +274,7 @@ export default function App() {
             matches={matches}
             activeMatchId={activeMatchId}
             onAddAssignment={handleAddAssignment}
+            onAddAssignments={handleAddAssignments}
             onUpdateAssignment={handleUpdateAssignment}
             onRemoveAssignment={handleRemoveAssignment}
           />

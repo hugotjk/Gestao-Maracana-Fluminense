@@ -42,11 +42,21 @@ export interface Sale {
 
 export interface PendingTask {
   id: string;
+  /** Jogo em que a pendência foi criada (só informativo; a pendência não pertence ao jogo). */
   matchId: string;
   titulo: string;
+  /** Para pendências normais: se já foi resolvida. */
   concluida: boolean;
   observacao?: string;
   dataCriacao?: string;
+  /** true = item do checklist de TODO jogo (é marcado por jogo e volta a ficar aberto no próximo). */
+  recorrente?: boolean;
+  /** Pendência recorrente: ids dos jogos em que já foi feita. */
+  jogosConcluidos?: string[];
+  /** Pendência normal: jogo ativo quando foi resolvida. */
+  jogoConclusao?: string;
+  /** Pendência normal: data em que foi resolvida (AAAA-MM-DD). */
+  dataConclusao?: string;
 }
 
 export type ViewTab = 'dashboard' | 'vendas' | 'escala' | 'funcionarios' | 'operacoes' | 'jogos' | 'pendencias' | 'configuracoes';

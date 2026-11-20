@@ -84,8 +84,13 @@ export function exportFullDatabaseXLSX(data: {
   add(data.matches, ['id', 'data', 'horario', 'mandante', 'visitante'], 'Jogos');
   add(data.assignments, ['id', 'matchId', 'cpf', 'operacaoCodigo', 'funcao'], 'Escala');
   add(
-    data.pendingTasks.map((t) => ({ ...t, concluida: t.concluida ? 'Sim' : 'Não' })),
-    ['id', 'matchId', 'titulo', 'concluida', 'observacao', 'dataCriacao'],
+    data.pendingTasks.map((t) => ({
+      ...t,
+      concluida: t.concluida ? 'Sim' : 'Não',
+      recorrente: t.recorrente ? 'Sim' : 'Não',
+      jogosConcluidos: (t.jogosConcluidos || []).join(';'),
+    })),
+    ['id', 'matchId', 'titulo', 'concluida', 'observacao', 'dataCriacao', 'recorrente', 'jogosConcluidos', 'jogoConclusao', 'dataConclusao'],
     'Pendencia'
   );
 
