@@ -8,6 +8,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  ReferenceLine,
 } from 'recharts';
 import {
   Trophy,
@@ -15,10 +16,9 @@ import {
   Calendar,
   DollarSign,
   Medal,
-  Layers,
   Filter,
   Sparkles,
-  ShoppingBag,
+  TrendingUp,
 } from 'lucide-react';
 import { Match, Operation, Sale } from '../types';
 
@@ -80,8 +80,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   sales,
   operations,
   matches,
+  activeMatchId,
 }) => {
-  const [activeTab, setActiveTab] = useState<'geral' | 'mes' | 'mes_jogo'>('geral');
+  const [activeTab, setActiveTab] = useState<'geral' | 'mes' | 'mes_jogo'>('mes_jogo');
 
   // Extract all unique months from sales & matches
   const availableMonths = useMemo(() => {
@@ -101,8 +102,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   }, [sales, matches]);
 
   // Selected Month state
+  // Começa no mês e no jogo ativos (escolhidos no topo da página)
+  const activeGame = matches.find((m) => m.id === activeMatchId);
   const [selectedMonthKey, setSelectedMonthKey] = useState<string>(
-    availableMonths[0]?.key || ''
+    (activeGame && parseMonthYear(activeGame.data).key) || availableMonths[0]?.key || ''
   );
 
   // Filter games by selected month
@@ -113,8 +116,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // Selected Match state for tab 3
   const [selectedGameId, setSelectedGameId] = useState<string>(
-    gamesInSelectedMonth[0]?.id || matches[0]?.id || ''
+    activeGame?.id || gamesInSelectedMonth[0]?.id || matches[0]?.id || ''
   );
+
+  // Quando trocar o Jogo Ativo no topo, o Dashboard acompanha
+  React.useEffect(() => {
+    const g = matches.find((m) => m.id === activeMatchId);
+    if (g) {
+      setSelectedMonthKey(parseMonthYear(g.data).key);
+      setSelectedGameId(g.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeMatchId]);
 
   // Update selected game when month changes
   React.useEffect(() => {
@@ -124,6 +137,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       }
     }
   }, [gamesInSelectedMonth, selectedGameId]);
+
+  // Total vendido por jogo (para os cartões e o gráfico de evolução)
+  const evolucao = useMemo(() => {
+    const totalDoJogo = (m: Match) =>
+      sales
+        .filter(
+          (s) =>
+            s.matchId === m.id || (s.mandante === m.mandante && s.visitante === m.visitante && s.data === m.data)
+        )
+        .reduce((acc, s) => acc + (s.venda || 0), 0);
+    const jogos = matches
+      .map((m) => {
+        const adversario = m.mandante.toLowerCase().includes('fluminense') ? m.visitante : m.mandante;
+        const dataBR = m.data ? m.data.split('-').reverse().slice(0, 2).join('/') : '';
+        return {
+          id: m.id,
+          data: m.data,
+          dataBR,
+          total: totalDoJogo(m),
+          nome: `${m.mandante} x ${m.visitante}`,
+          nomeCompleto: `${m.mandante} x ${m.visitante} (${dataBR})`,
+          rotulo: `${adversario} ${dataBR}`,
+        };
+      })
+      .filter((j) => j.total > 0)
+      .sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+    const media = jogos.length > 0 ? jogos.reduce((a, j) => a + j.total, 0) / jogos.length : 0;
+    const melhor = jogos.length > 0 ? jogos.reduce((best, j) => (j.total > best.total ? j : best)) : null;
+    return { jogos, media, melhor };
+  }, [sales, matches]);
+
+  const activeGameTotal = evolucao.jogos.find((j) => j.id === activeMatchId)?.total || 0;
 
   // Total sales overall
   const grandTotalSales = useMemo(() => {
@@ -185,7 +230,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   }, [matches, selectedGameId]);
 
   const rankingPorJogo = useMemo(() => {
-    if (!selectedGame) return { ranked: [], gameTotal: 0 };
+    if (!selectedGame) return { ranked: [], gameTotal: 0, metasBatidas: 0, setoresComMeta: 0 };
 
     const filteredSales = sales.filter(
       (s) =>
@@ -203,17 +248,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           (s) => s.operacao.trim().toLowerCase() === op.operacao.trim().toLowerCase()
         );
         const total = opSales.reduce((acc, curr) => acc + (curr.venda || 0), 0);
-
+        const meta = op.meta || 0;
+        const hasSale = opSales.length > 0;
+        const metaStatus: 'bateu' | 'nao_bateu' | 'sem_meta' | 'sem_venda' =
+          meta <= 0 ? 'sem_meta' : !hasSale ? 'sem_venda' : total >= meta ? 'bateu' : 'nao_bateu';
         return {
           codigo: op.codigo,
           nome: op.operacao,
           total,
+          meta,
+          metaPct: meta > 0 ? (total / meta) * 100 : 0,
+          metaStatus,
           pctTotal: gameTotal > 0 ? (total / gameTotal) * 100 : 0,
         };
       })
       .sort((a, b) => b.total - a.total);
 
-    return { ranked, gameTotal };
+    const comMeta = ranked.filter((r) => r.metaStatus === 'bateu' || r.metaStatus === 'nao_bateu');
+    const metasBatidas = comMeta.filter((r) => r.metaStatus === 'bateu').length;
+    return { ranked, gameTotal, metasBatidas, setoresComMeta: comMeta.length };
   }, [sales, operations, selectedGame]);
 
   // Chart colors
@@ -274,112 +327,120 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-xl text-xs font-bold text-emerald-950">
-          <DollarSign className="w-4 h-4 text-[#006633]" />
-          <span>Faturamento Acumulado: <strong>R$ {grandTotalSales.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></span>
-        </div>
       </div>
 
-      {/* Metrics Header Overview Cards */}
+      {/* Cartões de resumo */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-2xs font-bold text-slate-500 uppercase tracking-wider">
-              Total Faturado Geral
-            </span>
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#006633] flex items-center justify-center font-bold">
-              <DollarSign className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-2.5">
-            <span className="text-2xl font-extrabold text-slate-900">
-              R$ {grandTotalSales.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div className="mt-2 text-2xs text-slate-500">
-            Soma total de todas as vendas lançadas
-          </div>
-          <div className="absolute top-0 right-0 w-2 h-full bg-[#006633]"></div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-2xs font-bold text-slate-500 uppercase tracking-wider">
-              Líder do Ranking (#1)
-            </span>
-            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-              <Trophy className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-2.5">
-            <span className="text-base font-extrabold text-slate-900 truncate block">
-              {rankingGeral[0]?.total > 0 ? rankingGeral[0].nome : 'Sem vendas'}
-            </span>
-            <span className="text-xs font-bold text-amber-700">
-              R$ {(rankingGeral[0]?.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div className="mt-1 text-2xs text-slate-500">
-            Operação com maior volume de vendas
-          </div>
-          <div className="absolute top-0 right-0 w-2 h-full bg-amber-500"></div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-2xs font-bold text-slate-500 uppercase tracking-wider">
-              Operações Cadastradas
-            </span>
-            <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold">
-              <Layers className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-2.5">
-            <span className="text-2xl font-extrabold text-slate-900">
-              {operations.length}
-            </span>
-          </div>
-          <div className="mt-2 text-2xs text-slate-500">
-            Setores operacionais ativos no sistema
-          </div>
-          <div className="absolute top-0 right-0 w-2 h-full bg-purple-600"></div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-2xs font-bold text-slate-500 uppercase tracking-wider">
-              Total de Vendas Gravadas
-            </span>
-            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold">
-              <ShoppingBag className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-2.5">
-            <span className="text-2xl font-extrabold text-slate-900">
-              {sales.length}
-            </span>
-          </div>
-          <div className="mt-2 text-2xs text-slate-500">
-            Registros informados nos jogos
-          </div>
-          <div className="absolute top-0 right-0 w-2 h-full bg-blue-600"></div>
-        </div>
+        <StatCard
+          color="#8A0029"
+          icon={<Trophy className="w-5 h-5" />}
+          label="Jogo ativo"
+          value={activeGame ? formatR(activeGameTotal) : '—'}
+          sub={
+            activeGame
+              ? `${activeGame.mandante} x ${activeGame.visitante}${
+                  activeGameTotal > 0 && evolucao.media > 0
+                    ? ` · ${activeGameTotal >= evolucao.media ? '+' : ''}${(((activeGameTotal - evolucao.media) / evolucao.media) * 100).toFixed(0)}% vs média`
+                    : activeGameTotal === 0
+                    ? ' · sem vendas lançadas'
+                    : ''
+                }`
+              : 'Selecione um jogo no topo'
+          }
+        />
+        <StatCard
+          color="#006633"
+          icon={<TrendingUp className="w-5 h-5" />}
+          label="Média por jogo"
+          value={formatR(evolucao.media)}
+          sub={`Considerando ${evolucao.jogos.length} ${evolucao.jogos.length === 1 ? 'jogo com vendas' : 'jogos com vendas'}`}
+        />
+        <StatCard
+          color="#D97706"
+          icon={<Medal className="w-5 h-5" />}
+          label="Melhor jogo"
+          value={evolucao.melhor ? formatR(evolucao.melhor.total) : '—'}
+          sub={evolucao.melhor ? `${evolucao.melhor.nome} (${evolucao.melhor.dataBR})` : 'Sem vendas lançadas'}
+        />
+        <StatCard
+          color="#2563EB"
+          icon={<DollarSign className="w-5 h-5" />}
+          label="Total geral"
+          value={formatR(grandTotalSales)}
+          sub="Soma de todas as vendas lançadas"
+        />
       </div>
+
+      {/* Evolução ao longo dos jogos */}
+      {evolucao.jogos.length > 0 && (
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-[#8A0029]" />
+                Evolução das vendas por jogo
+              </h3>
+              <p className="text-xs text-slate-500">
+                Total vendido em cada jogo, do mais antigo para o mais recente. A linha tracejada é a média. Clique numa barra para ver o jogo.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 text-[11px] font-semibold text-slate-600">
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#8A0029]" /> Jogo ativo</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#006633]" /> Acima da média</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-slate-400" /> Abaixo da média</span>
+            </div>
+          </div>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={evolucao.jogos} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="rotulo" tick={{ fontSize: 10, fill: '#475569' }} angle={-35} textAnchor="end" interval={0} height={60} />
+                <YAxis tick={{ fontSize: 10, fill: '#475569' }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} width={55} />
+                <Tooltip
+                  formatter={(value: any) => [formatR(Number(value)), 'Vendido']}
+                  labelFormatter={(_l: any, payload: any) => payload?.[0]?.payload?.nomeCompleto || ''}
+                />
+                <ReferenceLine y={evolucao.media} stroke="#D97706" strokeDasharray="6 4" label={{ value: 'Média', position: 'insideTopRight', fontSize: 10, fill: '#B45309' }} />
+                <Bar
+                  dataKey="total"
+                  radius={[4, 4, 0, 0]}
+                  cursor="pointer"
+                  onClick={(d: any) => {
+                    const id = d?.id ?? d?.payload?.id;
+                    if (!id) return;
+                    const g = matches.find((m) => m.id === id);
+                    if (g) setSelectedMonthKey(parseMonthYear(g.data).key);
+                    setSelectedGameId(id);
+                    setActiveTab('mes_jogo');
+                  }}
+                >
+                  {evolucao.jogos.map((j) => (
+                    <Cell
+                      key={j.id}
+                      fill={j.id === activeMatchId ? '#8A0029' : j.total >= evolucao.media ? '#006633' : '#94a3b8'}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {/* Navigation Tabs for Rankings */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={() => setActiveTab('geral')}
+              onClick={() => setActiveTab('mes_jogo')}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
-                activeTab === 'geral'
+                activeTab === 'mes_jogo'
                   ? 'bg-[#8A0029] text-white shadow-md'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              <Trophy className="w-4 h-4" />
-              <span>1. Ranking Geral da Operação</span>
+              <Filter className="w-4 h-4" />
+              <span>Por jogo</span>
             </button>
 
             <button
@@ -391,19 +452,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               }`}
             >
               <Calendar className="w-4 h-4" />
-              <span>2. Ranking por Operação e Mês</span>
+              <span>Por mês</span>
             </button>
 
             <button
-              onClick={() => setActiveTab('mes_jogo')}
+              onClick={() => setActiveTab('geral')}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
-                activeTab === 'mes_jogo'
+                activeTab === 'geral'
                   ? 'bg-[#8A0029] text-white shadow-md'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              <Filter className="w-4 h-4" />
-              <span>3. Ranking por Operação, Mês e Jogo</span>
+              <Trophy className="w-4 h-4" />
+              <span>Geral (todos os jogos)</span>
             </button>
           </div>
         </div>
@@ -663,6 +724,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </span>
                   </div>
 
+                  {rankingPorJogo.setoresComMeta > 0 && (
+                    <div className="text-center">
+                      <span className="text-2xs font-bold text-slate-500 uppercase block">Metas batidas no jogo</span>
+                      <span
+                        className={`text-xl font-extrabold ${
+                          rankingPorJogo.metasBatidas === rankingPorJogo.setoresComMeta ? 'text-[#006633]' : 'text-amber-700'
+                        }`}
+                      >
+                        {rankingPorJogo.metasBatidas} de {rankingPorJogo.setoresComMeta} setores
+                      </span>
+                    </div>
+                  )}
+
                   <div className="text-right">
                     <span className="text-2xs font-bold text-slate-500 uppercase block">
                       Total Faturado no Jogo
@@ -682,15 +756,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         <th className="py-3 px-4">Código</th>
                         <th className="py-3 px-4">Operação / Setor</th>
                         <th className="py-3 px-4">Venda no Jogo (R$)</th>
+                        <th className="py-3 px-4">Meta (R$)</th>
+                        <th className="py-3 px-4">% da Meta</th>
+                        <th className="py-3 px-4">Comissão</th>
                         <th className="py-3 px-4">% do Jogo</th>
-                        <th className="py-3 px-4">Proporção</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
                       {rankingPorJogo.ranked.map((item, index) => {
-                        const topVal = rankingPorJogo.ranked[0]?.total || 1;
-                        const barPct = topVal > 0 ? (item.total / topVal) * 100 : 0;
-
                         return (
                           <tr key={item.codigo} className="hover:bg-slate-50/80 transition-colors">
                             <td className="py-3.5 px-4 font-bold">{getRankBadge(index)}</td>
@@ -701,16 +774,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             <td className="py-3.5 px-4 font-extrabold text-emerald-800">
                               R$ {item.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </td>
-                            <td className="py-3.5 px-4 font-bold text-slate-700">
-                              {item.pctTotal.toFixed(1)}%
+                            <td className="py-3.5 px-4 font-semibold text-slate-600">
+                              {item.meta > 0 ? `R$ ${item.meta.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}
                             </td>
                             <td className="py-3.5 px-4">
-                              <div className="w-32 bg-slate-200 rounded-full h-2.5 overflow-hidden">
-                                <div
-                                  className="h-2.5 bg-[#006633] rounded-full transition-all"
-                                  style={{ width: `${Math.min(barPct, 100)}%` }}
-                                ></div>
-                              </div>
+                              {item.meta > 0 ? (
+                                <div className="flex items-center gap-2">
+                                  <div className="w-24 bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                                    <div
+                                      className={`h-2.5 rounded-full transition-all ${
+                                        item.metaPct >= 100 ? 'bg-[#006633]' : item.metaPct >= 80 ? 'bg-amber-500' : 'bg-rose-600'
+                                      }`}
+                                      style={{ width: `${Math.min(item.metaPct, 100)}%` }}
+                                    ></div>
+                                  </div>
+                                  <span className="text-xs font-bold text-slate-700">{item.metaPct.toFixed(0)}%</span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-400">—</span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <MetaBadge status={item.metaStatus} falta={item.meta - item.total} />
+                            </td>
+                            <td className="py-3.5 px-4 font-bold text-slate-700">
+                              {item.pctTotal.toFixed(1)}%
                             </td>
                           </tr>
                         );
@@ -730,3 +818,50 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     </div>
   );
 };
+
+const MetaBadge: React.FC<{ status: 'bateu' | 'nao_bateu' | 'sem_meta' | 'sem_venda'; falta: number }> = ({
+  status,
+  falta,
+}) => {
+  if (status === 'bateu')
+    return (
+      <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 font-extrabold text-xs border border-emerald-300">
+        ✓ Bateu a meta
+      </span>
+    );
+  if (status === 'nao_bateu')
+    return (
+      <span
+        className="inline-flex items-center px-2.5 py-1 rounded-lg bg-rose-50 text-rose-800 font-extrabold text-xs border border-rose-200"
+        title={`Faltaram R$ ${falta.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+      >
+        Não bateu · faltaram R$ {falta.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+      </span>
+    );
+  if (status === 'sem_venda') return <span className="text-xs text-slate-400 font-semibold">Sem venda lançada</span>;
+  return <span className="text-xs text-slate-400 font-semibold">Sem meta</span>;
+};
+
+function formatR(v: number): string {
+  return `R$ ${(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+const StatCard: React.FC<{ color: string; icon: React.ReactNode; label: string; value: string; sub: string }> = ({
+  color,
+  icon,
+  label,
+  value,
+  sub,
+}) => (
+  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
+    <div className="flex items-center justify-between">
+      <span className="text-2xs font-bold text-slate-500 uppercase tracking-wider">{label}</span>
+      <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ color, backgroundColor: `${color}14` }}>
+        {icon}
+      </div>
+    </div>
+    <div className="mt-2.5 text-2xl font-extrabold text-slate-900">{value}</div>
+    <div className="mt-1.5 text-xs text-slate-500 truncate" title={sub}>{sub}</div>
+    <div className="absolute top-0 right-0 w-2 h-full" style={{ backgroundColor: color }}></div>
+  </div>
+);

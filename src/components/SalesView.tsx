@@ -163,6 +163,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
                   className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-extrabold text-slate-900 focus:ring-2 focus:ring-[#006633] focus:border-transparent focus:outline-none"
                 />
               </div>
+              <MetaHint meta={op.meta} raw={inputs[op.codigo] || ''} />
             </div>
           ))}
         </div>
@@ -260,5 +261,21 @@ export const SalesView: React.FC<SalesViewProps> = ({
         </div>
       </div>
     </div>
+  );
+};
+
+/** Mostra, enquanto digita, se o setor bateu a meta do jogo. */
+const MetaHint: React.FC<{ meta: number; raw: string }> = ({ meta, raw }) => {
+  if (!meta || meta <= 0) return <span className="text-[11px] text-slate-400">Sem meta cadastrada</span>;
+  const metaTxt = `Meta R$ ${meta.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+  if (!raw.trim()) return <span className="text-[11px] text-slate-500">{metaTxt}</span>;
+  const val = parseMoney(raw);
+  const pct = (val / meta) * 100;
+  if (val >= meta)
+    return <span className="text-[11px] font-bold text-emerald-700">✓ Bateu a meta ({pct.toFixed(0)}%)</span>;
+  return (
+    <span className={`text-[11px] font-bold ${pct >= 80 ? 'text-amber-700' : 'text-rose-700'}`}>
+      {pct.toFixed(0)}% da meta · faltam R$ {(meta - val).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+    </span>
   );
 };
