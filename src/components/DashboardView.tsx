@@ -758,7 +758,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         <th className="py-3 px-4">Venda no Jogo (R$)</th>
                         <th className="py-3 px-4">Meta (R$)</th>
                         <th className="py-3 px-4">% da Meta</th>
-                        <th className="py-3 px-4">Comissão</th>
+                        <th className="py-3 px-4">OBS</th>
                         <th className="py-3 px-4">% do Jogo</th>
                       </tr>
                     </thead>
