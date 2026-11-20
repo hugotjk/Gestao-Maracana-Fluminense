@@ -10,28 +10,21 @@ const STORAGE_KEYS = {
   ACTIVE_MATCH_ID: 'flu_app_active_match_id',
   SHEET_ID: 'flu_app_sheet_id',
   SCRIPT_URL: 'flu_app_script_url',
+  UNSYNCED: 'flu_app_unsynced_changes',
+  LAST_SYNC: 'flu_app_last_sync',
 };
 
 export const DEFAULT_SHEET_ID = '1LSacDLpH7y4M8s2H8627FnAxS0IvFe54ACK9rE4BErs';
 export const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxn95noFHcFSvIB9XANE9_jetXyCmo0OhUWj80vB-BHPI59w9hR9TkN9BY476hy7Ew/exec';
 
-// Helper to sort matches by date (oldest at the bottom -> ascending order from top to bottom means top is newest, bottom is oldest? Wait: "mais antigo fica em baixo" means top is newest, bottom is oldest, OR ascending order where oldest is at bottom. Ascending order means newest on top or oldest on top? Let's check: Top: Newest, Bottom: Oldest -> date descending OR Top: Newer, Bottom: Older -> date descending. Or if date ascending: Top is older, Bottom is newer. "o mais antigo fica em baixo" -> oldest at bottom means descending date sort (newest date first at the top, oldest date at the bottom)).
+// Jogos do mais novo (topo) para o mais antigo (embaixo)
 export function sortMatchesByDate(matches: Match[]): Match[] {
   return [...matches].sort((a, b) => {
-    // b.data vs a.data: descending means newest at top, oldest at bottom
     if (!a.data) return 1;
     if (!b.data) return -1;
     return b.data.localeCompare(a.data);
   });
 }
-
-const initialOperations: Operation[] = [];
-
-const initialEmployees: Employee[] = [];
-
-const initialSales: Sale[] = [];
-
-const initialAssignments: Assignment[] = [];
 
 export function getStoredMatches(): Match[] {
   const data = localStorage.getItem(STORAGE_KEYS.MATCHES);
@@ -68,10 +61,6 @@ export function saveOperations(operations: Operation[]) {
 
 export function sortEmployees(employees: Employee[]): Employee[] {
   return [...employees].sort((a, b) => {
-    // Favorites first
-    if (a.favorito && !b.favorito) return -1;
-    if (!a.favorito && b.favorito) return 1;
-    // Alphabetical by name
     return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' });
   });
 }
@@ -237,12 +226,21 @@ export function savePendingTasks(tasks: PendingTask[]) {
   localStorage.setItem(STORAGE_KEYS.PENDING_TASKS, JSON.stringify(sorted));
 }
 
-export function clearAllLocalData() {
-  localStorage.removeItem(STORAGE_KEYS.MATCHES);
-  localStorage.removeItem(STORAGE_KEYS.OPERATIONS);
-  localStorage.removeItem(STORAGE_KEYS.EMPLOYEES);
-  localStorage.removeItem(STORAGE_KEYS.ASSIGNMENTS);
-  localStorage.removeItem(STORAGE_KEYS.SALES);
-  localStorage.removeItem(STORAGE_KEYS.PENDING_TASKS);
-  localStorage.removeItem(STORAGE_KEYS.ACTIVE_MATCH_ID);
+
+/** Marca que há alterações neste aparelho que ainda não foram confirmadas pela planilha. */
+export function setUnsyncedChanges(value: boolean) {
+  if (value) localStorage.setItem(STORAGE_KEYS.UNSYNCED, '1');
+  else localStorage.removeItem(STORAGE_KEYS.UNSYNCED);
+}
+
+export function hasUnsyncedChanges(): boolean {
+  return localStorage.getItem(STORAGE_KEYS.UNSYNCED) === '1';
+}
+
+export function setLastSync(iso: string) {
+  localStorage.setItem(STORAGE_KEYS.LAST_SYNC, iso);
+}
+
+export function getLastSync(): string | null {
+  return localStorage.getItem(STORAGE_KEYS.LAST_SYNC);
 }

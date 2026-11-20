@@ -66,9 +66,6 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
     return employees
       .filter((e) => !assignedCpfs.has(e.cpf))
       .sort((a, b) => {
-        const favA = a.favorito ? 1 : 0;
-        const favB = b.favorito ? 1 : 0;
-        if (favA !== favB) return favB - favA;
         return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' });
       });
   }, [employees, assignedCpfs]);
@@ -208,7 +205,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
               ) : (
                 availableEmployees.map((e) => (
                   <option key={e.cpf} value={e.cpf}>
-                    {e.favorito ? '★ ' : ''}{e.nome} - CPF: {e.cpf} ({e.empresa})
+                    {e.nome} - CPF: {e.cpf} ({e.empresa})
                   </option>
                 ))
               )}

@@ -1,15 +1,89 @@
 import { Sale, Employee, Operation, Match, Assignment, PendingTask } from '../types';
 import { getScriptUrl } from './storage';
-
-export interface SyncStatus {
-  lastSynced?: string;
-  isSyncing: boolean;
-  error?: string;
-  connected: boolean;
-}
+import { parseMoney } from './money';
 
 /**
- * Utility to parse CSV string into 2D array of rows
+ * Versão do código do Apps Script que este app espera.
+ * Sempre que APPS_SCRIPT_CODE mudar, aumente este número: o app avisa quando a planilha
+ * ainda está com uma versão antiga publicada.
+ */
+export const SCRIPT_VERSION = 2;
+
+export interface AppData {
+  sales: Sale[];
+  employees: Employee[];
+  operations: Operation[];
+  matches: Match[];
+  assignments: Assignment[];
+  pendingTasks: PendingTask[];
+}
+
+export interface PushResult {
+  success: boolean;
+  message: string;
+  /** true quando a planilha respondeu, mas com um Apps Script antigo (que não grava pendências). */
+  outdated?: boolean;
+}
+
+/** Código que deve estar colado em Extensões > Apps Script da planilha. */
+export const APPS_SCRIPT_CODE = `// Gestão Maracanã - Fluminense | versão ${SCRIPT_VERSION}
+var SCRIPT_VERSION = ${SCRIPT_VERSION};
+
+function jsonOut(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doGet(e) {
+  return jsonOut({ status: "ok", version: SCRIPT_VERSION, message: "Web App do app Gestão Maracanã está ativo!" });
+}
+
+function doPost(e) {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+    var contents = (e && e.postData && e.postData.contents) ? e.postData.contents : "";
+    var data = contents ? JSON.parse(contents) : {};
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss && data.sheetId) ss = SpreadsheetApp.openById(data.sheetId);
+    if (!ss) return jsonOut({ status: "error", version: SCRIPT_VERSION, message: "Planilha não encontrada." });
+
+    if (data.salesHeader) updateSheet(ss, ["Venda", "Vendas"], data.salesHeader, data.sales || []);
+    if (data.employeesHeader) updateSheet(ss, ["Funcionarios", "Funcionários"], data.employeesHeader, data.employees || []);
+    if (data.operationsHeader) updateSheet(ss, ["Operacoes", "Operações"], data.operationsHeader, data.operations || []);
+    if (data.matchesHeader) updateSheet(ss, ["Jogos"], data.matchesHeader, data.matches || []);
+    if (data.assignmentsHeader) updateSheet(ss, ["Escala"], data.assignmentsHeader, data.assignments || []);
+    if (data.pendenciasHeader) updateSheet(ss, ["Pendencia", "Pendencias", "Pendência", "Pendências"], data.pendenciasHeader, data.pendencias || []);
+
+    SpreadsheetApp.flush();
+    return jsonOut({ status: "success", version: SCRIPT_VERSION, savedAt: new Date().toISOString() });
+  } catch (err) {
+    return jsonOut({ status: "error", version: SCRIPT_VERSION, message: err.toString() });
+  } finally {
+    try { lock.releaseLock(); } catch (e2) {}
+  }
+}
+
+function updateSheet(ss, names, headers, rows) {
+  var sheet = null;
+  for (var i = 0; i < names.length && !sheet; i++) sheet = ss.getSheetByName(names[i]);
+  if (!sheet) sheet = ss.insertSheet(names[0]);
+
+  // CPF e IDs como texto, para não perder zeros à esquerda
+  sheet.getRange(1, 1, Math.max(rows.length + 1, 1), headers.length).setNumberFormat("@");
+  for (var c = 0; c < headers.length; c++) {
+    if (headers[c] === "venda" || headers[c] === "meta") {
+      sheet.getRange(2, c + 1, Math.max(rows.length, 1), 1).setNumberFormat("#,##0.00");
+    }
+  }
+
+  sheet.clearContents();
+  var values = [headers].concat(rows);
+  sheet.getRange(1, 1, values.length, headers.length).setValues(values);
+}`;
+
+/**
+ * Converte CSV em linhas/colunas.
  */
 function parseCSV(csvText: string): string[][] {
   const lines: string[][] = [];
@@ -34,9 +108,7 @@ function parseCSV(csvText: string): string[][] {
     } else if ((char === '\r' || char === '\n') && !inQuotes) {
       if (char === '\r' && nextChar === '\n') i++;
       row.push(currentVal.trim());
-      if (row.some((c) => c.length > 0)) {
-        lines.push(row);
-      }
+      if (row.some((c) => c.length > 0)) lines.push(row);
       row = [];
       currentVal = '';
     } else {
@@ -46,406 +118,231 @@ function parseCSV(csvText: string): string[][] {
 
   if (currentVal || row.length > 0) {
     row.push(currentVal.trim());
-    if (row.some((c) => c.length > 0)) {
-      lines.push(row);
-    }
+    if (row.some((c) => c.length > 0)) lines.push(row);
   }
 
   return lines;
 }
 
 export function extractSpreadsheetId(input: string): string {
-  let clean = input.trim();
-  if (clean.includes('docs.google.com/spreadsheets/d/')) {
-    const match = clean.match(/\/d\/([a-zA-Z0-9-_]+)/);
-    if (match && match[1]) {
-      return match[1];
-    }
-  }
-  return clean;
+  const clean = (input || '').trim();
+  const match = clean.match(/\/d\/([a-zA-Z0-9-_]+)/);
+  return match && match[1] ? match[1] : clean;
+}
+
+/** CPF sempre com 11 dígitos (a planilha pode ter perdido zeros à esquerda). */
+function normalizeCpf(cpf: string): string {
+  const digits = (cpf || '').replace(/\D/g, '');
+  return digits ? digits.padStart(11, '0') : '';
 }
 
 /**
- * Pushes local data to Google Sheets via Apps Script Web App (0 login required)
- * OR via official Google Sheets REST API (if OAuth token is available).
+ * Envia todos os dados para a planilha via Apps Script e LÊ a resposta,
+ * para só dizer "salvo" quando a planilha confirmar.
  */
-export async function pushAllToGoogleSheets(
-  spreadsheetId: string,
-  accessToken: string,
-  data: {
-    sales: Sale[];
-    employees: Employee[];
-    operations: Operation[];
-    matches: Match[];
-    assignments?: Assignment[];
-    pendingTasks?: PendingTask[];
+export async function pushAllToGoogleSheets(spreadsheetId: string, data: AppData): Promise<PushResult> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl || !scriptUrl.startsWith('http')) {
+    return { success: false, message: 'Link do Web App (Apps Script) não configurado.' };
   }
-): Promise<{ success: boolean; message: string }> {
+
+  const payload = {
+    sheetId: extractSpreadsheetId(spreadsheetId),
+    salesHeader: ['codigo', 'data', 'mandante', 'visitante', 'operacao', 'venda'],
+    sales: data.sales.map((s) => [s.codigo, s.data, s.mandante, s.visitante, s.operacao, s.venda]),
+    employeesHeader: ['cpf', 'nome', 'email', 'celular', 'setor', 'empresa', 'funcao'],
+    employees: data.employees.map((e) => [e.cpf, e.nome, e.email, e.celular, e.setor, e.empresa, e.funcaoDefault || 'Atendente']),
+    operationsHeader: ['codigo', 'operacao', 'meta'],
+    operations: data.operations.map((o) => [o.codigo, o.operacao, o.meta]),
+    matchesHeader: ['codigo', 'data', 'horario', 'mandante', 'visitante'],
+    matches: data.matches.map((m) => [m.id, m.data, m.horario, m.mandante, m.visitante]),
+    assignmentsHeader: ['id', 'jogoId', 'cpf', 'operacaoCodigo', 'funcao'],
+    assignments: data.assignments.map((a) => [a.id, a.matchId, a.cpf, a.operacaoCodigo, a.funcao || '']),
+    pendenciasHeader: ['id', 'jogoId', 'titulo', 'concluida', 'observacao', 'dataCriacao'],
+    pendencias: data.pendingTasks.map((t) => [t.id, t.matchId, t.titulo, t.concluida ? 'Sim' : 'Não', t.observacao || '', t.dataCriacao || '']),
+  };
+
+  let json: any;
   try {
-    const cleanSheetId = extractSpreadsheetId(spreadsheetId);
-    if (!cleanSheetId) {
-      throw new Error('ID da Planilha não foi informado.');
-    }
-
-    const scriptUrl = getScriptUrl();
-    const payload = {
-      sheetId: cleanSheetId,
-      salesHeader: ['codigo', 'data', 'mandante', 'visitante', 'operacao', 'venda'],
-      sales: data.sales.map((s) => [s.codigo, s.data, s.mandante, s.visitante, s.operacao, s.venda]),
-      employeesHeader: ['cpf', 'nome', 'email', 'celular', 'setor', 'empresa', 'funcao', 'favorito'],
-      employees: data.employees.map((e) => [e.cpf, e.nome, e.email, e.celular, e.setor, e.empresa, e.funcaoDefault || 'Atendente', e.favorito ? 'Sim' : 'Não']),
-      operationsHeader: ['codigo', 'operacao', 'meta'],
-      operations: data.operations.map((o) => [o.codigo, o.operacao, o.meta]),
-      matchesHeader: ['codigo', 'data', 'horario', 'mandante', 'visitante'],
-      matches: data.matches.map((m) => [m.id, m.data, m.horario, m.mandante, m.visitante]),
-      assignmentsHeader: ['id', 'jogoId', 'cpf', 'operacaoCodigo', 'funcao'],
-      assignments: (data.assignments || []).map((a) => [a.id, a.matchId, a.cpf, a.operacaoCodigo, a.funcao || '']),
-      pendenciasHeader: ['id', 'jogoId', 'titulo', 'concluida', 'observacao', 'dataCriacao'],
-      pendencias: (data.pendingTasks || []).map((t) => [t.id, t.matchId, t.titulo, t.concluida ? 'Sim' : 'Não', t.observacao || '', t.dataCriacao || '']),
-    };
-
-    let scriptSuccess = false;
-
-    // 1. Try Apps Script Web App if URL configured (ZERO login required!)
-    if (scriptUrl && scriptUrl.startsWith('http')) {
-      try {
-        await fetch(scriptUrl, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(payload),
-        });
-        scriptSuccess = true;
-      } catch (err) {
-        console.warn('Erro enviando via Apps Script:', err);
-      }
-    }
-
-    // 2. If OAuth token available, use Google Sheets API v4
-    if (accessToken) {
-      const updateTab = async (range: string, values: any[][]) => {
-        const clearRes = await fetch(
-          `https://sheets.googleapis.com/v4/spreadsheets/${cleanSheetId}/values/${encodeURIComponent(range)}:clear`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-
-        if (!clearRes.ok) {
-          const errData = await clearRes.json().catch(() => ({}));
-          throw new Error(errData?.error?.message || `Não foi possível acessar a aba ${range}.`);
-        }
-
-        const response = await fetch(
-          `https://sheets.googleapis.com/v4/spreadsheets/${cleanSheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
-          {
-            method: 'PUT',
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              range,
-              majorDimension: 'ROWS',
-              values,
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData?.error?.message || `Erro ao atualizar a aba ${range}`);
-        }
-      };
-
-      // Aba Venda
-      await updateTab('Venda!A1:F', [
-        ['codigo', 'data', 'mandante', 'visitante', 'operacao', 'venda'],
-        ...data.sales.map((s) => [s.codigo, s.data, s.mandante, s.visitante, s.operacao, s.venda]),
-      ]);
-
-      // Aba Funcionarios
-      await updateTab('Funcionarios!A1:H', [
-        ['cpf', 'nome', 'email', 'celular', 'setor', 'empresa', 'funcao', 'favorito'],
-        ...data.employees.map((e) => [e.cpf, e.nome, e.email, e.celular, e.setor, e.empresa, e.funcaoDefault || 'Atendente', e.favorito ? 'Sim' : 'Não']),
-      ]);
-
-      // Aba Operacoes
-      await updateTab('Operacoes!A1:C', [
-        ['codigo', 'operacao', 'meta'],
-        ...data.operations.map((o) => [o.codigo, o.operacao, o.meta]),
-      ]);
-
-      // Aba Jogos
-      await updateTab('Jogos!A1:E', [
-        ['codigo', 'data', 'horario', 'mandante', 'visitante'],
-        ...data.matches.map((m) => [m.id, m.data, m.horario, m.mandante, m.visitante]),
-      ]);
-
-      // Aba Escala (if assignments exist)
-      if (data.assignments && data.assignments.length > 0) {
-        await updateTab('Escala!A1:E', [
-          ['id', 'jogoId', 'cpf', 'operacaoCodigo', 'funcao'],
-          ...data.assignments.map((a) => [a.id, a.matchId, a.cpf, a.operacaoCodigo, a.funcao || '']),
-        ]);
-      }
-
-      // Aba Pendencia / Pendencias
-      if (data.pendingTasks !== undefined) {
-        const rows = [
-          ['id', 'jogoId', 'titulo', 'concluida', 'observacao', 'dataCriacao'],
-          ...data.pendingTasks.map((t) => [t.id, t.matchId, t.titulo, t.concluida ? 'Sim' : 'Não', t.observacao || '', t.dataCriacao || '']),
-        ];
-        try {
-          await updateTab('Pendencia!A1:F', rows);
-        } catch {
-          try {
-            await updateTab('Pendencias!A1:F', rows);
-          } catch {
-            try {
-              await updateTab('Pendência!A1:F', rows);
-            } catch {
-              await updateTab('Pendências!A1:F', rows);
-            }
-          }
-        }
-      }
-
+    // text/plain evita a verificação prévia (preflight) de CORS; o Apps Script responde com CORS liberado.
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      redirect: 'follow',
+    });
+    const text = await res.text();
+    try {
+      json = JSON.parse(text);
+    } catch {
       return {
-        success: true,
-        message: 'Planilha alimentada com sucesso via Google API!',
+        success: false,
+        message:
+          'A planilha respondeu algo inesperado. Confira se o Web App foi implantado com acesso "Qualquer pessoa".',
       };
     }
+  } catch (err) {
+    console.warn('Erro enviando para o Apps Script:', err);
+    return { success: false, message: 'Sem conexão com a planilha. Os dados ficam guardados aqui e serão enviados de novo.' };
+  }
 
-    if (scriptSuccess) {
-      return {
-        success: true,
-        message: 'Dados enviados para a Planilha via Web App!',
-      };
-    }
+  if (json?.status !== 'success') {
+    return { success: false, message: json?.message || 'A planilha recusou os dados.' };
+  }
 
-    // 3. Neither Apps Script URL nor OAuth token is configured
+  if (!json.version || json.version < SCRIPT_VERSION) {
     return {
       success: false,
-      message: 'Para enviar dados para a planilha sem login, cole o Link do Web App da sua planilha.',
+      outdated: true,
+      message:
+        'O Apps Script da planilha está desatualizado e não grava as pendências. Atualize o código em Google Sheets > Atualizar código da planilha.',
     };
-  } catch (error: any) {
-    console.error('Erro na sincronização com Google Sheets:', error);
-    return {
-      success: false,
-      message: error?.message || 'Falha ao sincronizar com o Google Sheets.',
-    };
+  }
+
+  return { success: true, message: 'Tudo salvo na planilha.' };
+}
+
+/** Consulta a versão do Apps Script publicado (GET). */
+export async function checkScriptVersion(): Promise<{ ok: boolean; version?: number; message: string }> {
+  const scriptUrl = getScriptUrl();
+  if (!scriptUrl) return { ok: false, message: 'Link do Web App não configurado.' };
+  try {
+    const res = await fetch(scriptUrl, { method: 'GET', redirect: 'follow' });
+    const json = JSON.parse(await res.text());
+    const version = Number(json?.version) || 1;
+    if (version < SCRIPT_VERSION) {
+      return { ok: false, version, message: `Script da planilha desatualizado (versão ${version}). Atualize para a versão ${SCRIPT_VERSION}.` };
+    }
+    return { ok: true, version, message: `Conectado. Script da planilha na versão ${version}.` };
+  } catch {
+    return { ok: false, message: 'Não foi possível falar com o Web App. Confira o link e se o acesso está como "Qualquer pessoa".' };
   }
 }
 
 /**
- * Pulls data directly from any public Google Sheet (using GViz CSV API - 100% login-free!)
- * or falls back to Google REST API if token exists.
+ * Lê os dados da planilha (precisa estar compartilhada como "Qualquer pessoa com o link pode ver").
  */
 export async function pullFromGoogleSheets(
-  spreadsheetId: string,
-  accessToken?: string | null
-): Promise<{
-  success: boolean;
-  message: string;
-  data?: {
-    sales: Sale[];
-    employees: Employee[];
-    operations: Operation[];
-    matches: Match[];
-    assignments?: Assignment[];
-    pendingTasks?: PendingTask[];
-  };
-}> {
+  spreadsheetId: string
+): Promise<{ success: boolean; message: string; data?: AppData }> {
   try {
-    const cleanSheetId = spreadsheetId.trim();
-    if (!cleanSheetId) {
-      throw new Error('ID da Planilha não informado.');
-    }
+    const cleanSheetId = extractSpreadsheetId(spreadsheetId);
+    if (!cleanSheetId) throw new Error('ID da Planilha não informado.');
 
     const fetchSheetRows = async (tabName: string): Promise<string[][]> => {
-      // 1. Try public GViz CSV URL (Works on ANY public sheet with ZERO login/API key!)
-      try {
-        const gvizUrl = `https://docs.google.com/spreadsheets/d/${cleanSheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
-        const res = await fetch(gvizUrl);
-        if (res.ok) {
-          const text = await res.text();
-          const cleanText = text.trim();
-          if (
-            cleanText.startsWith('<!') ||
-            cleanText.startsWith('<html') ||
-            cleanText.startsWith('<HTML') ||
-            cleanText.includes('google.visualization.Query.setResponse') ||
-            cleanText.includes('"status":"error"') ||
-            cleanText.includes("'status':'error'")
-          ) {
-            throw new Error(`Aba "${tabName}" não encontrada ou erro no GViz.`);
-          }
-          const rows = parseCSV(text);
-          if (rows && rows.length > 0) {
-            return rows;
-          }
-        }
-      } catch (err) {
-        console.warn(`Tentativa de leitura pública via CSV falhou para ${tabName}, tentando REST API...`, err);
+      const gvizUrl = `https://docs.google.com/spreadsheets/d/${cleanSheetId}/gviz/tq?tqx=out:csv&headers=1&sheet=${encodeURIComponent(tabName)}`;
+      const res = await fetch(gvizUrl, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`Falha ao ler a aba "${tabName}".`);
+      const text = (await res.text()).trim();
+      if (text.startsWith('<') || text.includes('google.visualization.Query.setResponse')) {
+        throw new Error(`A planilha não está pública ou a aba "${tabName}" deu erro.`);
       }
-
-      // 2. Fallback to REST API if OAuth token exists
-      const restUrl = `https://sheets.googleapis.com/v4/spreadsheets/${cleanSheetId}/values/${encodeURIComponent(tabName)}`;
-      const headers: Record<string, string> = {};
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-      }
-
-      const res = await fetch(restUrl, { headers });
-      if (!res.ok) {
-        throw new Error(`Não foi possível acessar a aba "${tabName}". Certifique-se de que a planilha está pública ("Qualquer pessoa com elink pode ver").`);
-      }
-      const json = await res.json();
-      return json.values || [];
+      return parseCSV(text);
     };
 
-    const fetchSheetRowsWithFallback = async (...tabNames: string[]): Promise<string[][]> => {
+    // IMPORTANTE: o GViz devolve a PRIMEIRA aba da planilha quando a aba pedida não existe.
+    // Por isso conferimos o cabeçalho antes de aceitar as linhas; sem isso, as linhas da aba
+    // "Venda" eram importadas como pendências e apagavam as pendências salvas.
+    const normalize = (v: string) =>
+      (v || '').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const headerMatches = (rows: string[][], expected: string[]) =>
+      rows.length > 0 && expected.every((h, idx) => normalize(rows[0][idx]) === normalize(h));
+
+    const readTab = async (expectedHeader: string[], ...tabNames: string[]): Promise<string[][]> => {
       for (const tab of tabNames) {
         try {
           const rows = await fetchSheetRows(tab);
-          if (rows && rows.length > 0) return rows;
+          if (headerMatches(rows, expectedHeader)) return rows;
         } catch (err) {
-          console.warn(`Tentativa de leitura para "${tab}" falhou, tentando próxima opção...`);
+          console.warn(`Leitura da aba "${tab}" falhou.`, err);
         }
       }
       return [];
     };
 
     const [vendaRows, funcRows, opsRows, jogosRows, escalaRows, pendenciasRows] = await Promise.all([
-      fetchSheetRowsWithFallback('Venda', 'Vendas'),
-      fetchSheetRowsWithFallback('Funcionarios', 'Funcionários', 'Funcionario', 'Funcionário'),
-      fetchSheetRowsWithFallback('Operacoes', 'Operações', 'Operacao', 'Operação'),
-      fetchSheetRowsWithFallback('Jogos', 'Jogo'),
-      fetchSheetRowsWithFallback('Escala', 'Escalas'),
-      fetchSheetRowsWithFallback('Pendencia', 'Pendencias', 'Pendência', 'Pendências'),
+      readTab(['codigo', 'data', 'mandante', 'visitante', 'operacao'], 'Venda', 'Vendas'),
+      readTab(['cpf', 'nome'], 'Funcionarios', 'Funcionários'),
+      readTab(['codigo', 'operacao', 'meta'], 'Operacoes', 'Operações'),
+      readTab(['codigo', 'data', 'horario'], 'Jogos'),
+      readTab(['id', 'jogoId', 'cpf'], 'Escala'),
+      readTab(['id', 'jogoId', 'titulo'], 'Pendencia', 'Pendencias', 'Pendência', 'Pendências'),
     ]);
 
-    // Parse Vendas
-    const sales: Sale[] = [];
-    if (vendaRows.length > 1) {
-      for (let i = 1; i < vendaRows.length; i++) {
-        const row = vendaRows[i];
-        if (row && row[0]) {
-          sales.push({
-            codigo: row[0] || `V${String(i).padStart(9, '0')}`,
-            data: row[1] || '',
-            mandante: row[2] || '',
-            visitante: row[3] || '',
-            operacao: row[4] || '',
-            venda: parseFloat((row[5] || '0').replace('R$', '').replace('.', '').replace(',', '.')) || 0,
-          });
-        }
-      }
-    }
+    const sales: Sale[] = vendaRows
+      .slice(1)
+      .filter((row) => row[0])
+      .map((row) => ({
+        codigo: row[0],
+        data: row[1] || '',
+        mandante: row[2] || '',
+        visitante: row[3] || '',
+        operacao: row[4] || '',
+        venda: parseMoney(row[5]),
+      }));
 
-    // Parse Funcionarios
-    const employees: Employee[] = [];
-    if (funcRows.length > 1) {
-      for (let i = 1; i < funcRows.length; i++) {
-        const row = funcRows[i];
-        if (row && (row[0] || row[1])) {
-          const isFav = row[7] === 'Sim' || row[7] === 'true' || row[7] === '1';
-          employees.push({
-            cpf: row[0] || `0000000000${i}`,
-            nome: row[1] || `Funcionário ${i}`,
-            email: row[2] || '',
-            celular: row[3] || '',
-            setor: row[4] || '1,2,3,4,5,6',
-            empresa: row[5] || 'FMS',
-            funcaoDefault: row[6] || 'Atendente',
-            favorito: isFav,
-          });
-        }
-      }
-    }
+    const employees: Employee[] = funcRows
+      .slice(1)
+      .filter((row) => row[0] || row[1])
+      .map((row, i) => ({
+        cpf: normalizeCpf(row[0]) || `0000000000${i + 1}`,
+        nome: row[1] || `Funcionário ${i + 1}`,
+        email: row[2] || '',
+        celular: row[3] || '',
+        setor: row[4] || '1,2,3,4,5,6',
+        empresa: row[5] || 'FMS',
+        funcaoDefault: row[6] || 'Atendente',
+      }));
 
-    // Parse Operacoes
-    const operations: Operation[] = [];
-    if (opsRows.length > 1) {
-      for (let i = 1; i < opsRows.length; i++) {
-        const row = opsRows[i];
-        if (row && (row[0] || row[1])) {
-          operations.push({
-            codigo: row[0] || `O${String(i).padStart(9, '0')}`,
-            operacao: row[1] || `Operação ${i}`,
-            meta: parseFloat((row[2] || '0').replace('R$', '').replace('.', '').replace(',', '.')) || 0,
-          });
-        }
-      }
-    }
+    const operations: Operation[] = opsRows
+      .slice(1)
+      .filter((row) => row[0] || row[1])
+      .map((row, i) => ({
+        codigo: row[0] || `O${String(i + 1).padStart(9, '0')}`,
+        operacao: row[1] || `Operação ${i + 1}`,
+        meta: parseMoney(row[2]),
+      }));
 
-    // Parse Jogos
-    const matches: Match[] = [];
-    if (jogosRows.length > 1) {
-      for (let i = 1; i < jogosRows.length; i++) {
-        const row = jogosRows[i];
-        if (row && (row[0] || row[1])) {
-          matches.push({
-            id: row[0] || `M00${i}`,
-            data: row[1] || '',
-            horario: row[2] || '16:00',
-            mandante: row[3] || 'Fluminense',
-            visitante: row[4] || '',
-          });
-        }
-      }
-    }
+    const matches: Match[] = jogosRows
+      .slice(1)
+      .filter((row) => row[0] || row[1])
+      .map((row, i) => ({
+        id: row[0] || `M00${i + 1}`,
+        data: row[1] || '',
+        horario: row[2] || '16:00',
+        mandante: row[3] || 'Fluminense',
+        visitante: row[4] || '',
+      }));
 
-    // Parse Escala (Assignments)
-    const assignments: Assignment[] = [];
-    if (escalaRows.length > 1) {
-      for (let i = 1; i < escalaRows.length; i++) {
-        const row = escalaRows[i];
-        if (row && (row[0] || row[1] || row[2])) {
-          assignments.push({
-            id: row[0] || `ASG_${Date.now()}_${i}`,
-            matchId: row[1] || '',
-            cpf: row[2] || '',
-            operacaoCodigo: row[3] || '',
-            funcao: row[4] || '',
-          });
-        }
-      }
-    }
+    const assignments: Assignment[] = escalaRows
+      .slice(1)
+      .filter((row) => row[0] || row[1] || row[2])
+      .map((row, i) => ({
+        id: row[0] || `ASG_${Date.now()}_${i}`,
+        matchId: row[1] || '',
+        cpf: normalizeCpf(row[2]),
+        operacaoCodigo: row[3] || '',
+        funcao: row[4] || '',
+      }));
 
-    // Parse Pendencias
-    const pendingTasks: PendingTask[] = [];
-    if (pendenciasRows && pendenciasRows.length > 1) {
-      for (let i = 1; i < pendenciasRows.length; i++) {
-        const row = pendenciasRows[i];
-        if (row && (row[0] || row[1] || row[2])) {
-          const isDone = row[3] === 'Sim' || row[3] === 'true' || row[3] === '1';
-          pendingTasks.push({
-            id: row[0] || `TASK_${Date.now()}_${i}`,
-            matchId: row[1] || '',
-            titulo: row[2] || '',
-            concluida: isDone,
-            observacao: row[4] || '',
-            dataCriacao: row[5] || '',
-          });
-        }
-      }
-    }
+    const pendingTasks: PendingTask[] = pendenciasRows
+      .slice(1)
+      .filter((row) => row[0] || row[1] || row[2])
+      .map((row, i) => ({
+        id: row[0] || `TASK_${Date.now()}_${i}`,
+        matchId: row[1] || '',
+        titulo: row[2] || '',
+        concluida: ['sim', 'true', '1'].includes((row[3] || '').toLowerCase()),
+        observacao: row[4] || '',
+        dataCriacao: row[5] || '',
+      }));
 
     return {
       success: true,
-      message: 'Dados importados diretamente da planilha pública com sucesso!',
+      message: 'Dados carregados da planilha.',
       data: { sales, employees, operations, matches, assignments, pendingTasks },
     };
   } catch (error: any) {
-    return {
-      success: false,
-      message: error?.message || 'Falha ao buscar dados da planilha pública.',
-    };
+    return { success: false, message: error?.message || 'Falha ao ler a planilha.' };
   }
 }

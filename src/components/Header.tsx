@@ -10,7 +10,10 @@ import {
   CheckCircle2,
   Trophy,
   ListChecks,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
+import { useSyncStatus } from '../lib/sync';
 import { ViewTab, Match } from '../types';
 
 interface HeaderProps {
@@ -19,7 +22,7 @@ interface HeaderProps {
   matches: Match[];
   activeMatchId: string;
   onSelectActiveMatch: (id: string) => void;
-  isSyncing?: boolean;
+  isLoadingSheet?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -28,8 +31,12 @@ export const Header: React.FC<HeaderProps> = ({
   matches,
   activeMatchId,
   onSelectActiveMatch,
-  isSyncing,
+  isLoadingSheet,
 }) => {
+  const sync = useSyncStatus();
+  const busy = isLoadingSheet || sync.state === 'pending' || sync.state === 'saving';
+  const failed = sync.state === 'error' || sync.state === 'outdated';
+  const syncTitle = isLoadingSheet ? 'Carregando dados da planilha…' : sync.message;
   const activeMatch = matches.find((m) => m.id === activeMatchId) || matches[0];
 
   return (
@@ -69,9 +76,7 @@ export const Header: React.FC<HeaderProps> = ({
             onChange={(e) => onSelectActiveMatch(e.target.value)}
             className="bg-[#3D0010] text-white text-xs sm:text-sm font-medium rounded-lg px-2.5 py-1.5 border border-rose-800/80 focus:ring-2 focus:ring-amber-400 focus:outline-none cursor-pointer"
           >
-            {[...matches]
-              .sort((a, b) => (b.data || '').localeCompare(a.data || ''))
-              .map((m) => (
+            {matches.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.mandante} vs {m.visitante} ({m.data ? new Date(m.data + 'T00:00:00').toLocaleDateString('pt-BR') : ''})
                 </option>
@@ -184,12 +189,25 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-            <span>Google Sheets</span>
-            {isSyncing ? (
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
-            ) : (
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
-            )}
+            <span>Planilha</span>
+            <span title={syncTitle} className="flex items-center gap-1 text-[11px] font-semibold bg-slate-900/50 px-1.5 py-0.5 rounded-md">
+              {busy ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 text-amber-300 animate-spin" />
+                  <span className="text-amber-200">Salvando…</span>
+                </>
+              ) : failed ? (
+                <>
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-300" />
+                  <span className="text-rose-200">Não salvo</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                  <span className="text-emerald-200">Salvo</span>
+                </>
+              )}
+            </span>
           </button>
         </div>
       </div>
