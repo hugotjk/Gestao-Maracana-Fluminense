@@ -1,6 +1,6 @@
 {
   "name": "Gestão Operacional Fluminense",
-  "description": "Aplicativo de gestão de vendas por operação, cadastro de jogos, escala de funcionários e integração com Google Sheets nos jogos do Fluminense.",
+  "description": "Gestão de vendas por operação, jogos, escala de funcionários e pendências, salvando em uma planilha do Google.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }

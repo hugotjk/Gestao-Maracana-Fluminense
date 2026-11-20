@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { DollarSign, Save, Trash2, Edit2, Calendar, CheckCircle2, Search, PlusCircle, Trophy } from 'lucide-react';
 import { Match, Operation, Sale } from '../types';
+import { parseMoney, toInputMoney } from '../lib/money';
 import { generateNextSaleCode } from '../lib/storage';
 
 interface SalesViewProps {
@@ -41,7 +42,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
           s.operacao.trim().toLowerCase() === op.operacao.trim().toLowerCase()
       );
       if (existing) {
-        initialValues[op.codigo] = String(existing.venda);
+        initialValues[op.codigo] = toInputMoney(existing.venda);
       } else {
         initialValues[op.codigo] = '';
       }
@@ -62,7 +63,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
     operations.forEach((op) => {
       const rawVal = inputs[op.codigo];
       if (rawVal !== undefined && rawVal !== '') {
-        const numericVal = parseFloat(rawVal.replace(',', '.')) || 0;
+        const numericVal = parseMoney(rawVal);
 
         // Check if sale record exists for this match + operation
         const existingIdx = currentSalesList.findIndex(
@@ -154,9 +155,8 @@ export const SalesView: React.FC<SalesViewProps> = ({
                   R$
                 </span>
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="0,00"
                   value={inputs[op.codigo] || ''}
                   onChange={(e) => handleInputChange(op.codigo, e.target.value)}

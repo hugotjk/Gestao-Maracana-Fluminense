@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { Employee, Assignment, Operation, Match } from '../types';
+import { Employee, Assignment, Operation, Match, Sale, PendingTask } from '../types';
 
 export interface ExportRow {
   cpf: string;
@@ -65,37 +65,30 @@ export function generateEmployeeAssignmentsXLSX(
   XLSX.writeFile(workbook, cleanFileName);
 }
 
-export function exportFullDatabaseXLSX(
-  sales: any[],
-  employees: Employee[],
-  operations: Operation[],
-  matches: Match[]
-) {
+/** Backup completo: baixa um arquivo Excel com todas as abas do app. */
+export function exportFullDatabaseXLSX(data: {
+  sales: Sale[];
+  employees: Employee[];
+  operations: Operation[];
+  matches: Match[];
+  assignments: Assignment[];
+  pendingTasks: PendingTask[];
+}) {
   const workbook = XLSX.utils.book_new();
+  const add = (rows: any[], header: string[], name: string) =>
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows, { header }), name);
 
-  // Tab 1: Venda
-  const wsVenda = XLSX.utils.json_to_sheet(sales, {
-    header: ['codigo', 'data', 'mandante', 'visitante', 'operacao', 'venda'],
-  });
-  XLSX.utils.book_append_sheet(workbook, wsVenda, 'Venda');
+  add(data.sales.map(({ matchId, ...s }) => s), ['codigo', 'data', 'mandante', 'visitante', 'operacao', 'venda'], 'Venda');
+  add(data.employees, ['cpf', 'nome', 'email', 'celular', 'setor', 'empresa', 'funcaoDefault'], 'Funcionarios');
+  add(data.operations, ['codigo', 'operacao', 'meta'], 'Operacoes');
+  add(data.matches, ['id', 'data', 'horario', 'mandante', 'visitante'], 'Jogos');
+  add(data.assignments, ['id', 'matchId', 'cpf', 'operacaoCodigo', 'funcao'], 'Escala');
+  add(
+    data.pendingTasks.map((t) => ({ ...t, concluida: t.concluida ? 'Sim' : 'Não' })),
+    ['id', 'matchId', 'titulo', 'concluida', 'observacao', 'dataCriacao'],
+    'Pendencia'
+  );
 
-  // Tab 2: Funcionarios
-  const wsFunc = XLSX.utils.json_to_sheet(employees, {
-    header: ['cpf', 'nome', 'email', 'celular', 'setor', 'empresa', 'funcaoDefault'],
-  });
-  XLSX.utils.book_append_sheet(workbook, wsFunc, 'Funcionarios');
-
-  // Tab 3: Operacoes
-  const wsOps = XLSX.utils.json_to_sheet(operations, {
-    header: ['codigo', 'operacao', 'meta'],
-  });
-  XLSX.utils.book_append_sheet(workbook, wsOps, 'Operacoes');
-
-  // Tab 4: Jogos
-  const wsJogos = XLSX.utils.json_to_sheet(matches, {
-    header: ['id', 'data', 'horario', 'mandante', 'visitante'],
-  });
-  XLSX.utils.book_append_sheet(workbook, wsJogos, 'Jogos');
-
-  XLSX.writeFile(workbook, 'backup_banco_de_dados_fluminense.xlsx');
+  const today = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(workbook, `backup_gestao_maracana_${today}.xlsx`);
 }

@@ -17,13 +17,13 @@ import {
   getActiveMatchId,
   setActiveMatchId,
   getSpreadsheetId,
-  getScriptUrl,
+  hasUnsyncedChanges,
   sortMatchesByDate,
   sortEmployees,
   sortAssignmentsByOperation,
 } from './lib/storage';
-import { initAuth, getAccessToken } from './lib/auth';
-import { pushAllToGoogleSheets, pullFromGoogleSheets } from './lib/googleSheets';
+import { pullFromGoogleSheets, AppData } from './lib/googleSheets';
+import { markChanged, flush as flushSync } from './lib/sync';
 
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
@@ -33,12 +33,12 @@ import { EmployeesView } from './components/EmployeesView';
 import { OperationsView } from './components/OperationsView';
 import { MatchesView } from './components/MatchesView';
 import { PendingTasksView } from './components/PendingTasksView';
-import { GoogleSheetsModal } from './components/GoogleSheetsModal';
+import { SettingsView } from './components/SettingsView';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<ViewTab>('dashboard');
 
-  // Application Data States
+  // Dados do app
   const [matches, setMatchesState] = useState<Match[]>([]);
   const [operations, setOperationsState] = useState<Operation[]>([]);
   const [employees, setEmployeesState] = useState<Employee[]>([]);
@@ -46,296 +46,135 @@ export default function App() {
   const [sales, setSalesState] = useState<Sale[]>([]);
   const [pendingTasks, setPendingTasksState] = useState<PendingTask[]>([]);
   const [activeMatchId, setActiveMatchIdState] = useState<string>('');
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [isLoadingSheet, setIsLoadingSheet] = useState<boolean>(false);
 
-  // Initial Load from Storage & Auth listener
-  useEffect(() => {
-    const loadedMatches = getStoredMatches();
+  const loadFromDevice = useCallback(() => {
     const loadedOperations = getStoredOperations();
     const loadedEmployees = getStoredEmployees();
-    const loadedAssignments = sortAssignmentsByOperation(getStoredAssignments(), loadedOperations, loadedEmployees);
-    const loadedSales = getStoredSales();
-    const loadedPendingTasks = getStoredPendingTasks();
-    const loadedActiveId = getActiveMatchId();
-
-    setMatchesState(loadedMatches);
+    setMatchesState(getStoredMatches());
     setOperationsState(loadedOperations);
     setEmployeesState(loadedEmployees);
-    setAssignmentsState(loadedAssignments);
-    setSalesState(loadedSales);
-    setPendingTasksState(loadedPendingTasks);
-    setActiveMatchIdState(loadedActiveId);
-
-    // Try pulling latest data from Google Sheets on load (e.g. for new devices or cross-device sync)
-    const sheetId = getSpreadsheetId();
-    if (sheetId) {
-      setIsSyncing(true);
-      pullFromGoogleSheets(sheetId)
-        .then((res) => {
-          if (res.success && res.data) {
-            if (res.data.assignments && res.data.assignments.length > 0) {
-              const sorted = sortAssignmentsByOperation(res.data.assignments, res.data.operations, res.data.employees);
-              setAssignmentsState(sorted);
-              saveAssignments(sorted);
-            }
-            if (res.data.employees && res.data.employees.length > 0) {
-              const sorted = sortEmployees(res.data.employees);
-              setEmployeesState(sorted);
-              saveEmployees(sorted);
-            }
-            if (res.data.matches && res.data.matches.length > 0) {
-              const sorted = sortMatchesByDate(res.data.matches);
-              setMatchesState(sorted);
-              saveMatches(sorted);
-            }
-            if (res.data.operations && res.data.operations.length > 0) {
-              setOperationsState(res.data.operations);
-              saveOperations(res.data.operations);
-            }
-            if (res.data.sales && res.data.sales.length > 0) {
-              setSalesState(res.data.sales);
-              saveSales(res.data.sales);
-            }
-            if (res.data.pendingTasks && res.data.pendingTasks.length > 0) {
-              const sorted = sortPendingTasks(res.data.pendingTasks);
-              setPendingTasksState(sorted);
-              savePendingTasks(sorted);
-            }
-          }
-        })
-        .catch((err) => console.warn('Auto pull on load error:', err))
-        .finally(() => setIsSyncing(false));
-    }
-
-    const unsubscribe = initAuth(
-      (_user, token) => {
-        setAuthToken(token);
-      },
-      () => {
-        setAuthToken(null);
-      }
-    );
-
-    return () => unsubscribe();
+    setAssignmentsState(sortAssignmentsByOperation(getStoredAssignments(), loadedOperations, loadedEmployees));
+    setSalesState(getStoredSales());
+    setPendingTasksState(getStoredPendingTasks());
+    setActiveMatchIdState(getActiveMatchId());
   }, []);
 
-  // Automatic sync helper function
-  const triggerAutoSync = useCallback(
-    async (
-      latestSales: Sale[],
-      latestEmployees: Employee[],
-      latestOperations: Operation[],
-      latestMatches: Match[],
-      latestAssignments?: Assignment[],
-      latestPendingTasks?: PendingTask[]
-    ) => {
-      try {
-        const token = authToken || (await getAccessToken());
-        const sheetId = getSpreadsheetId();
-        const scriptUrl = getScriptUrl();
-
-        if ((token || scriptUrl) && sheetId) {
-          setIsSyncing(true);
-          await pushAllToGoogleSheets(sheetId, token || '', {
-            sales: latestSales,
-            employees: latestEmployees,
-            operations: latestOperations,
-            matches: latestMatches,
-            assignments: latestAssignments || assignments,
-            pendingTasks: latestPendingTasks || pendingTasks,
-          });
-        }
-      } catch (err) {
-        console.error('Erro na sincronização automática em segundo plano:', err);
-      } finally {
-        setIsSyncing(false);
+  /** Grava no aparelho os dados vindos da planilha (só as abas que vieram com linhas). */
+  const applySheetData = useCallback(
+    (data: AppData) => {
+      if (data.employees.length > 0) saveEmployees(sortEmployees(data.employees));
+      if (data.operations.length > 0) saveOperations(data.operations);
+      if (data.matches.length > 0) saveMatches(sortMatchesByDate(data.matches));
+      if (data.sales.length > 0) saveSales(data.sales);
+      if (data.assignments.length > 0) {
+        saveAssignments(sortAssignmentsByOperation(data.assignments, data.operations, data.employees));
       }
+      if (data.pendingTasks.length > 0) savePendingTasks(sortPendingTasks(data.pendingTasks));
+      loadFromDevice();
     },
-    [authToken, assignments, pendingTasks]
+    [loadFromDevice]
   );
 
-  // Set active match
+  /** Busca os dados da planilha. Se houver alterações não enviadas neste aparelho, elas têm prioridade. */
+  const reloadFromSheet = useCallback(
+    async (force = false): Promise<{ success: boolean; message: string }> => {
+      if (!force && hasUnsyncedChanges()) {
+        void flushSync();
+        return { success: false, message: 'Há alterações deste aparelho ainda não enviadas; enviando primeiro.' };
+      }
+      setIsLoadingSheet(true);
+      try {
+        const res = await pullFromGoogleSheets(getSpreadsheetId());
+        // Se o usuário alterou algo enquanto carregava, não sobrescreve.
+        if (res.success && res.data && (force || !hasUnsyncedChanges())) {
+          applySheetData(res.data);
+        }
+        return res;
+      } finally {
+        setIsLoadingSheet(false);
+      }
+    },
+    [applySheetData]
+  );
+
+  // Ao abrir: carrega do aparelho e depois atualiza com a planilha
+  useEffect(() => {
+    loadFromDevice();
+    void reloadFromSheet();
+  }, [loadFromDevice, reloadFromSheet]);
+
+  // Jogo ativo
   const handleSelectActiveMatch = (id: string) => {
     setActiveMatchIdState(id);
     setActiveMatchId(id);
   };
 
-  // Match operations
-  const handleAddMatch = (m: Match) => {
-    const next = sortMatchesByDate([...matches, m]);
-    setMatchesState(next);
-    saveMatches(next);
-    triggerAutoSync(sales, employees, operations, next, assignments, pendingTasks);
+  // Jogos
+  const updateMatches = (next: Match[]) => {
+    const sorted = sortMatchesByDate(next);
+    setMatchesState(sorted);
+    saveMatches(sorted);
+    markChanged();
   };
+  const handleAddMatch = (m: Match) => updateMatches([...matches, m]);
+  const handleUpdateMatch = (m: Match) => updateMatches(matches.map((item) => (item.id === m.id ? m : item)));
+  const handleDeleteMatch = (id: string) => updateMatches(matches.filter((item) => item.id !== id));
 
-  const handleUpdateMatch = (m: Match) => {
-    const next = sortMatchesByDate(matches.map((item) => (item.id === m.id ? m : item)));
-    setMatchesState(next);
-    saveMatches(next);
-    triggerAutoSync(sales, employees, operations, next, assignments, pendingTasks);
-  };
-
-  const handleDeleteMatch = (id: string) => {
-    const next = sortMatchesByDate(matches.filter((item) => item.id !== id));
-    setMatchesState(next);
-    saveMatches(next);
-    triggerAutoSync(sales, employees, operations, next, assignments, pendingTasks);
-  };
-
-  // Operations operations
-  const handleAddOperation = (op: Operation) => {
-    const next = [...operations, op];
+  // Operações
+  const updateOperations = (next: Operation[]) => {
     setOperationsState(next);
     saveOperations(next);
-    triggerAutoSync(sales, employees, next, matches, assignments, pendingTasks);
+    markChanged();
   };
+  const handleAddOperation = (op: Operation) => updateOperations([...operations, op]);
+  const handleUpdateOperation = (op: Operation) =>
+    updateOperations(operations.map((item) => (item.codigo === op.codigo ? op : item)));
+  const handleDeleteOperation = (codigo: string) => updateOperations(operations.filter((item) => item.codigo !== codigo));
 
-  const handleUpdateOperation = (op: Operation) => {
-    const next = operations.map((item) => (item.codigo === op.codigo ? op : item));
-    setOperationsState(next);
-    saveOperations(next);
-    triggerAutoSync(sales, employees, next, matches, assignments, pendingTasks);
+  // Funcionários
+  const updateEmployees = (next: Employee[]) => {
+    const sorted = sortEmployees(next);
+    setEmployeesState(sorted);
+    saveEmployees(sorted);
+    markChanged();
   };
+  const handleAddEmployee = (emp: Employee) => updateEmployees([...employees, emp]);
+  const handleUpdateEmployee = (emp: Employee) =>
+    updateEmployees(employees.map((item) => (item.cpf === emp.cpf ? emp : item)));
+  const handleDeleteEmployee = (cpf: string) => updateEmployees(employees.filter((item) => item.cpf !== cpf));
 
-  const handleDeleteOperation = (codigo: string) => {
-    const next = operations.filter((item) => item.codigo !== codigo);
-    setOperationsState(next);
-    saveOperations(next);
-    triggerAutoSync(sales, employees, next, matches, assignments, pendingTasks);
+  // Escala
+  const updateAssignments = (next: Assignment[]) => {
+    const sorted = sortAssignmentsByOperation(next, operations, employees);
+    setAssignmentsState(sorted);
+    saveAssignments(sorted);
+    markChanged();
   };
+  const handleAddAssignment = (asg: Assignment) => updateAssignments([...assignments, asg]);
+  const handleUpdateAssignment = (asg: Assignment) =>
+    updateAssignments(assignments.map((item) => (item.id === asg.id ? asg : item)));
+  const handleRemoveAssignment = (id: string) => updateAssignments(assignments.filter((item) => item.id !== id));
 
-  // Employee operations
-  const handleAddEmployee = (emp: Employee) => {
-    const next = sortEmployees([...employees, emp]);
-    setEmployeesState(next);
-    saveEmployees(next);
-    triggerAutoSync(sales, next, operations, matches, assignments, pendingTasks);
-  };
-
-  const handleUpdateEmployee = (emp: Employee) => {
-    const next = sortEmployees(employees.map((item) => (item.cpf === emp.cpf ? emp : item)));
-    setEmployeesState(next);
-    saveEmployees(next);
-    triggerAutoSync(sales, next, operations, matches, assignments, pendingTasks);
-  };
-
-  const handleDeleteEmployee = (cpf: string) => {
-    const next = sortEmployees(employees.filter((item) => item.cpf !== cpf));
-    setEmployeesState(next);
-    saveEmployees(next);
-    triggerAutoSync(sales, next, operations, matches, assignments, pendingTasks);
-  };
-
-  // Assignments operations
-  const handleAddAssignment = (asg: Assignment) => {
-    const next = sortAssignmentsByOperation([...assignments, asg], operations, employees);
-    setAssignmentsState(next);
-    saveAssignments(next);
-    triggerAutoSync(sales, employees, operations, matches, next, pendingTasks);
-  };
-
-  const handleUpdateAssignment = (asg: Assignment) => {
-    const updated = assignments.map((item) => (item.id === asg.id ? asg : item));
-    const next = sortAssignmentsByOperation(updated, operations, employees);
-    setAssignmentsState(next);
-    saveAssignments(next);
-    triggerAutoSync(sales, employees, operations, matches, next, pendingTasks);
-  };
-
-  const handleRemoveAssignment = (id: string) => {
-    const next = assignments.filter((item) => item.id !== id);
-    setAssignmentsState(next);
-    saveAssignments(next);
-    triggerAutoSync(sales, employees, operations, matches, next, pendingTasks);
-  };
-
-  // Sales operations
+  // Vendas
   const handleSaveSales = (updatedSales: Sale[]) => {
     setSalesState(updatedSales);
     saveSales(updatedSales);
-    triggerAutoSync(updatedSales, employees, operations, matches, assignments, pendingTasks);
+    markChanged();
   };
+  const handleDeleteSale = (codigo: string) => handleSaveSales(sales.filter((item) => item.codigo !== codigo));
 
-  const handleDeleteSale = (codigo: string) => {
-    const next = sales.filter((item) => item.codigo !== codigo);
-    setSalesState(next);
-    saveSales(next);
-    triggerAutoSync(next, employees, operations, matches, assignments, pendingTasks);
+  // Pendências
+  const updatePendingTasks = (next: PendingTask[]) => {
+    const sorted = sortPendingTasks(next);
+    setPendingTasksState(sorted);
+    savePendingTasks(sorted);
+    markChanged();
   };
-
-  // Pending tasks operations
-  const handleAddPendingTask = (task: PendingTask) => {
-    const next = sortPendingTasks([...pendingTasks, task]);
-    setPendingTasksState(next);
-    savePendingTasks(next);
-    triggerAutoSync(sales, employees, operations, matches, assignments, next);
-  };
-
-  const handleUpdatePendingTask = (task: PendingTask) => {
-    const updatedList = pendingTasks.map((t) => (t.id === task.id ? task : t));
-    const next = sortPendingTasks(updatedList);
-    setPendingTasksState(next);
-    savePendingTasks(next);
-    triggerAutoSync(sales, employees, operations, matches, assignments, next);
-  };
-
-  const handleDeletePendingTask = (id: string) => {
-    const next = sortPendingTasks(pendingTasks.filter((t) => t.id !== id));
-    setPendingTasksState(next);
-    savePendingTasks(next);
-    triggerAutoSync(sales, employees, operations, matches, assignments, next);
-  };
-
-  // Bulk import from Google Sheets
-  const handleImportData = (data: {
-    sales: Sale[];
-    employees: Employee[];
-    operations: Operation[];
-    matches: Match[];
-    assignments?: Assignment[];
-    pendingTasks?: PendingTask[];
-  }) => {
-    let newSales = sales;
-    let newEmployees = employees;
-    let newOperations = operations;
-    let newMatches = matches;
-    let newAssignments = assignments;
-    let newPendingTasks = pendingTasks;
-
-    if (data.sales && data.sales.length > 0) {
-      newSales = data.sales;
-      setSalesState(newSales);
-      saveSales(newSales);
-    }
-    if (data.employees && data.employees.length > 0) {
-      newEmployees = data.employees;
-      setEmployeesState(newEmployees);
-      saveEmployees(newEmployees);
-    }
-    if (data.operations && data.operations.length > 0) {
-      newOperations = data.operations;
-      setOperationsState(newOperations);
-      saveOperations(newOperations);
-    }
-    if (data.matches && data.matches.length > 0) {
-      newMatches = data.matches;
-      setMatchesState(newMatches);
-      saveMatches(newMatches);
-    }
-    if (data.assignments && data.assignments.length > 0) {
-      newAssignments = data.assignments;
-      setAssignmentsState(newAssignments);
-      saveAssignments(newAssignments);
-    }
-    if (data.pendingTasks && data.pendingTasks.length > 0) {
-      newPendingTasks = sortPendingTasks(data.pendingTasks);
-      setPendingTasksState(newPendingTasks);
-      savePendingTasks(newPendingTasks);
-    }
-
-    triggerAutoSync(newSales, newEmployees, newOperations, newMatches, newAssignments, newPendingTasks);
-  };
+  const handleAddPendingTask = (task: PendingTask) => updatePendingTasks([...pendingTasks, task]);
+  const handleUpdatePendingTask = (task: PendingTask) =>
+    updatePendingTasks(pendingTasks.map((t) => (t.id === task.id ? task : t)));
+  const handleDeletePendingTask = (id: string) => updatePendingTasks(pendingTasks.filter((t) => t.id !== id));
 
   return (
     <div id="app-wrapper" className="min-h-screen bg-slate-100/70 text-slate-900 font-sans flex flex-col antialiased">
@@ -345,7 +184,7 @@ export default function App() {
         matches={matches}
         activeMatchId={activeMatchId}
         onSelectActiveMatch={handleSelectActiveMatch}
-        isSyncing={isSyncing}
+        isLoadingSheet={isLoadingSheet}
       />
 
       <main id="app-main-content" className="flex-1 pb-12">
@@ -424,14 +263,15 @@ export default function App() {
         )}
 
         {currentTab === 'configuracoes' && (
-          <GoogleSheetsModal
+          <SettingsView
             sales={sales}
             employees={employees}
             operations={operations}
             matches={matches}
             assignments={assignments}
             pendingTasks={pendingTasks}
-            onImportData={handleImportData}
+            isLoadingSheet={isLoadingSheet}
+            onReloadFromSheet={() => reloadFromSheet(true)}
           />
         )}
       </main>
@@ -442,7 +282,7 @@ export default function App() {
             Fluminense Football Club - Sistema de Gestão Operacional de Estádio
           </p>
           <p className="text-slate-500">
-            Sincronização em tempo real com Google Sheets (Planilhas Google) & Gerador de Escalas em Excel (XLSX)
+            Dados salvos no aparelho e enviados automaticamente para a planilha do Google
           </p>
         </div>
       </footer>

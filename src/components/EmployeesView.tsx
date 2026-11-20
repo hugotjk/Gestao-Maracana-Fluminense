@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { UserPlus, Search, Edit2, Trash2, CheckCircle2, Building, Mail, Phone, Hash, Shield, Star } from 'lucide-react';
+import { UserPlus, Search, Edit2, Trash2, CheckCircle2, Building, Mail, Phone, Hash, Shield } from 'lucide-react';
 import { Employee } from '../types';
 
 interface EmployeesViewProps {
@@ -101,9 +101,6 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
       );
     })
     .sort((a, b) => {
-      const favA = a.favorito ? 1 : 0;
-      const favB = b.favorito ? 1 : 0;
-      if (favA !== favB) return favB - favA;
       return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' });
     });
 
@@ -274,7 +271,6 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-100/80 text-xs font-semibold text-slate-600 uppercase tracking-wider border-b border-slate-200">
-                <th className="py-3 px-3 text-center">Fav</th>
                 <th className="py-3 px-4">CPF</th>
                 <th className="py-3 px-4">Nome</th>
                 <th className="py-3 px-4">Email</th>
@@ -287,28 +283,13 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
             <tbody className="divide-y divide-slate-100 text-xs">
               {filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400 text-xs">
+                  <td colSpan={7} className="py-8 text-center text-slate-400 text-xs">
                     Nenhum funcionário encontrado.
                   </td>
                 </tr>
               ) : (
                 filteredEmployees.map((emp) => (
                   <tr key={emp.cpf} className="hover:bg-slate-50 transition-colors">
-                    <td className="py-3 px-3 text-center">
-                      <button
-                        onClick={() => onUpdateEmployee({ ...emp, favorito: !emp.favorito })}
-                        className="p-1 rounded-md hover:bg-amber-100/60 transition-colors cursor-pointer"
-                        title={emp.favorito ? 'Remover dos favoritos' : 'Marcar como favorito'}
-                      >
-                        <Star
-                          className={`w-4 h-4 ${
-                            emp.favorito
-                              ? 'fill-amber-400 text-amber-500'
-                              : 'text-slate-300 hover:text-amber-400'
-                          }`}
-                        />
-                      </button>
-                    </td>
                     <td className="py-3 px-4 font-mono font-bold text-slate-700">
                       {emp.cpf}
                     </td>

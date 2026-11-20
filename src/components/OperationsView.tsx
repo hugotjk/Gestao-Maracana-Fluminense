@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { SlidersHorizontal, PlusCircle, Search, Edit2, Trash2, CheckCircle2, Target, Hash } from 'lucide-react';
 import { Operation } from '../types';
+import { parseMoney, toInputMoney } from '../lib/money';
 import { generateNextOperationCode } from '../lib/storage';
 
 interface OperationsViewProps {
@@ -34,7 +35,7 @@ export const OperationsView: React.FC<OperationsViewProps> = ({
   const handleStartEdit = (op: Operation) => {
     setEditingOp(op);
     setNomeOperacao(op.operacao);
-    setMetaValue(String(op.meta));
+    setMetaValue(toInputMoney(op.meta));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -46,7 +47,7 @@ export const OperationsView: React.FC<OperationsViewProps> = ({
       return;
     }
 
-    const numericMeta = parseFloat(metaValue.replace(',', '.')) || 0;
+    const numericMeta = parseMoney(metaValue);
 
     if (editingOp) {
       const updated: Operation = {
@@ -141,9 +142,8 @@ export const OperationsView: React.FC<OperationsViewProps> = ({
                 R$
               </span>
               <input
-                type="number"
-                step="0.01"
-                min="0"
+                type="text"
+                inputMode="decimal"
                 placeholder="0,00"
                 value={metaValue}
                 onChange={(e) => setMetaValue(e.target.value)}
