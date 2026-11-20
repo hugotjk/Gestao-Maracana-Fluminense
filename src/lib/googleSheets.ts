@@ -309,11 +309,19 @@ export async function pullFromGoogleSheets(
       return json.values || [];
     };
 
-    const fetchSheetRowsWithFallback = async (...tabNames: string[]): Promise<string[][]> => {
+    // IMPORTANTE: o endpoint GViz devolve a PRIMEIRA aba da planilha quando a aba pedida não existe.
+    // Por isso conferimos o cabeçalho antes de aceitar as linhas; senão, por exemplo, as linhas da
+    // aba "Venda" eram importadas como pendências e apagavam as pendências salvas localmente.
+    const normalize = (v: string) =>
+      (v || '').toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const headerMatches = (rows: string[][], expected: string[]) =>
+      rows.length > 0 && expected.every((h, idx) => normalize(rows[0][idx]) === normalize(h));
+
+    const fetchSheetRowsWithFallback = async (expectedHeader: string[], ...tabNames: string[]): Promise<string[][]> => {
       for (const tab of tabNames) {
         try {
           const rows = await fetchSheetRows(tab);
-          if (rows && rows.length > 0) return rows;
+          if (rows && rows.length > 0 && headerMatches(rows, expectedHeader)) return rows;
         } catch (err) {
           console.warn(`Tentativa de leitura para "${tab}" falhou, tentando próxima opção...`);
         }
@@ -322,12 +330,12 @@ export async function pullFromGoogleSheets(
     };
 
     const [vendaRows, funcRows, opsRows, jogosRows, escalaRows, pendenciasRows] = await Promise.all([
-      fetchSheetRowsWithFallback('Venda', 'Vendas'),
-      fetchSheetRowsWithFallback('Funcionarios', 'Funcionários', 'Funcionario', 'Funcionário'),
-      fetchSheetRowsWithFallback('Operacoes', 'Operações', 'Operacao', 'Operação'),
-      fetchSheetRowsWithFallback('Jogos', 'Jogo'),
-      fetchSheetRowsWithFallback('Escala', 'Escalas'),
-      fetchSheetRowsWithFallback('Pendencia', 'Pendencias', 'Pendência', 'Pendências'),
+      fetchSheetRowsWithFallback(['codigo', 'data', 'mandante', 'visitante', 'operacao'], 'Venda', 'Vendas'),
+      fetchSheetRowsWithFallback(['cpf', 'nome'], 'Funcionarios', 'Funcionários', 'Funcionario', 'Funcionário'),
+      fetchSheetRowsWithFallback(['codigo', 'operacao', 'meta'], 'Operacoes', 'Operações', 'Operacao', 'Operação'),
+      fetchSheetRowsWithFallback(['codigo', 'data', 'horario'], 'Jogos', 'Jogo'),
+      fetchSheetRowsWithFallback(['id', 'jogoId', 'cpf'], 'Escala', 'Escalas'),
+      fetchSheetRowsWithFallback(['id', 'jogoId', 'titulo'], 'Pendencia', 'Pendencias', 'Pendência', 'Pendências'),
     ]);
 
     // Parse Vendas
