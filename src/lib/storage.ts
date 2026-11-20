@@ -203,7 +203,16 @@ export function generateNextOperationCode(existingOps: Operation[]): string {
   return `O${String(nextNum).padStart(9, '0')}`;
 }
 
+/**
+ * A versão antiga importava linhas da aba Venda como se fossem pendências
+ * (id "V000000001", jogo = uma data). Essas linhas são descartadas aqui.
+ */
+function isGhostTask(t: PendingTask): boolean {
+  return /^V\d{9}$/.test(t.id || '') && /^\d{4}-\d{2}-\d{2}$/.test(t.matchId || '');
+}
+
 export function sortPendingTasks(tasks: PendingTask[]): PendingTask[] {
+  tasks = tasks.filter((t) => !isGhostTask(t));
   const pending = tasks.filter((t) => !t.concluida).sort((a, b) => (a.titulo || '').localeCompare(b.titulo || '', 'pt-BR', { sensitivity: 'base' }));
   const completed = tasks.filter((t) => t.concluida).sort((a, b) => (a.titulo || '').localeCompare(b.titulo || '', 'pt-BR', { sensitivity: 'base' }));
   return [...pending, ...completed];
